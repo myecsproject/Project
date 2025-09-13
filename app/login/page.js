@@ -26,7 +26,7 @@ export default function LoginPage() {
 
   const handleSocialLogin = (provider) => {
     // Dummy social login implementation - redirect to profile setup
-    router.push('/profile-setup');
+    router.push('/onboarding');
   };
 
   return (
