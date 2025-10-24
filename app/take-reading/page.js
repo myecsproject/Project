@@ -215,12 +215,7 @@ export default function TakeReadingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-purple-900 py-8 px-4 sm:px-6 lg:px-8">
-      {/* Background decoration */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse"></div>
-      </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 sm:px-6 lg:px-8">
 
       <div className="max-w-7xl mx-auto relative z-10">
         {/* Enhanced Header */}
@@ -235,14 +230,6 @@ export default function TakeReadingPage() {
             Advanced cardiac rhythm analysis powered by artificial intelligence
           </p>
           <div className="flex items-center justify-center space-x-6 mt-6">
-            <div className="flex items-center space-x-2 text-sm text-gray-500">
-              <Shield className="h-4 w-4" />
-              <span>FDA Cleared</span>
-            </div>
-            <div className="flex items-center space-x-2 text-sm text-gray-500">
-              <Users className="h-4 w-4" />
-              <span>Trusted by 10M+</span>
-            </div>
             <div className="flex items-center space-x-2 text-sm text-gray-500">
               <Star className="h-4 w-4" />
               <span>98.5% Accuracy</span>

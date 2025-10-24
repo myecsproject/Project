@@ -1,4 +1,7 @@
 "use client";
+import { useState, useEffect } from 'react';
+import { useAuth } from '../context/authContext';
+
 
 import Link from 'next/link';
 import { 
@@ -9,41 +12,120 @@ import {
   ArrowRight,
   CheckCircle,
   Zap,
-  Clock
+  Clock,
+  TrendingUp,
+  Star
 } from 'lucide-react';
 
 export default function HomePage() {
+  const { user, loading } = useAuth();
+
+  const stats = [
+    { number: '10K+', label: 'Active Users' },
+    { number: '99.5%', label: 'Accuracy Rate' },
+    { number: '24/7', label: 'Monitoring' },
+    { number: '5M+', label: 'Readings Analyzed' },
+  ];
+
   const features = [
     {
       icon: Activity,
-      title: 'Real-time ECG Analysis',
-      description: 'Advanced algorithms analyze your heart rhythm in real-time for immediate insights.',
+      title: 'AI-Powered Analysis',
+      description: 'Advanced machine learning algorithms detect heart abnormalities with medical-grade accuracy.'
     },
     {
       icon: Shield,
-      title: 'Early Detection',
-      description: 'Detect potential heart abnormalities before they become serious health issues.',
+      title: 'Real-Time Monitoring',
+      description: 'Continuous heart rhythm analysis provides instant alerts for any irregularities.'
     },
     {
-      icon: Clock,
-      title: '24/7 Monitoring',
-      description: 'Continuous monitoring ensures your heart health is always protected.',
+      icon: Heart,
+      title: 'Early Detection',
+      description: 'Catch potential issues before they become serious with proactive health monitoring.'
     },
     {
       icon: Users,
-      title: 'Professional Care',
-      description: 'Connect with healthcare professionals for expert consultation and guidance.',
+      title: 'Expert Support',
+      description: 'Connect with healthcare professionals and get personalized recommendations.'
     },
   ];
 
-  const stats = [
-    { number: '99.8%', label: 'Accuracy Rate' },
-    { number: '50K+', label: 'Users Protected' },
-    { number: '24/7', label: 'Monitoring' },
-    { number: '5min', label: 'Quick Scan' },
+  const quickStats = [
+    { 
+      icon: Heart, 
+      label: 'Avg Heart Rate', 
+      value: '72 BPM', 
+      change: '+2', 
+      trend: 'up',
+      color: 'text-red-500' 
+    },
+    { 
+      icon: Activity, 
+      label: 'Last Reading', 
+      value: 'Normal', 
+      change: '2h ago', 
+      trend: 'neutral',
+      color: 'text-green-500' 
+    },
+    { 
+      icon: Shield, 
+      label: 'Risk Level', 
+      value: 'Low', 
+      change: 'Stable', 
+      trend: 'stable',
+      color: 'text-blue-500' 
+    },
+    { 
+      icon: Clock, 
+      label: 'Weekly Checks', 
+      value: '5/7', 
+      change: '2 left', 
+      trend: 'neutral',
+      color: 'text-purple-500' 
+    },
   ];
 
-  return (
+  const recentReadings = [
+    { date: 'Today, 2:30 PM', status: 'Normal', heartRate: 75, duration: '30s' },
+    { date: 'Yesterday, 8:15 AM', status: 'Normal', heartRate: 72, duration: '32s' },
+    { date: 'Oct 12, 6:45 PM', status: 'Normal', heartRate: 78, duration: '28s' },
+  ];
+
+  const healthTips = [
+    "Stay hydrated - proper hydration helps maintain healthy blood pressure",
+    "Regular exercise strengthens your heart and improves circulation",
+    "Monitor your stress levels - chronic stress can affect heart health",
+    "Get enough sleep - aim for 7-9 hours of quality sleep per night"
+  ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl mb-6">
+            <Heart className="h-8 w-8 text-white animate-pulse" />
+          </div>
+          <div className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            Loading HeartGuard...
+          </div>
+          <div className="text-gray-600 dark:text-gray-400">
+            Checking authentication status
+          </div>
+          <div className="mt-4 flex justify-center space-x-1">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                style={{ animationDelay: `${i * 0.1}s` }}
+              ></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return ( !user ? ( <>
     <div className="min-h-screen">
       {/* Hero Section */}
       <section className="px-4 py-20 sm:px-6 lg:px-8">
@@ -160,5 +242,164 @@ export default function HomePage() {
         </div>
       </section>
     </div>
+    </>):(
+      <>
+      <div className="min-h-screen bg-white dark:bg-gray-900 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto relative z-10">
+          {/* Welcome Header */}
+          <div className="text-center mb-12 slide-up mt-16">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl mb-6 float-animation">
+              <Heart className="h-10 w-10 text-white heart-beat" />
+            </div>
+            <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent mb-4">
+              Welcome back, {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}!
+            </h1>
+            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+              Your heart health dashboard is ready. Let's keep your heart beating strong and healthy.
+            </p>
+            <div className="flex items-center justify-center space-x-6 mt-6">
+              
+              <div className="flex items-center space-x-2 text-sm text-blue-600">
+                <Shield className="h-4 w-4" />
+                <span>Protected 24/7</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="grid md:grid-cols-3 gap-6 mb-12">
+            <Link
+              href="/take-reading"
+              className="group glass-effect rounded-2xl p-6 card-hover text-center"
+            >
+              <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Activity className="h-8 w-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Take Reading</h3>
+              <p className="text-gray-600 dark:text-gray-400">Start a new heart rhythm analysis</p>
+            </Link>
+
+            <Link
+              href="/past-readings"
+              className="group glass-effect rounded-2xl p-6 card-hover text-center"
+            >
+              <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Clock className="h-8 w-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">View History</h3>
+              <p className="text-gray-600 dark:text-gray-400">Review your past readings</p>
+            </Link>
+
+            <Link
+              href="/health-status"
+              className="group glass-effect rounded-2xl p-6 card-hover text-center"
+            >
+              <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Shield className="h-8 w-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Health Status</h3>
+              <p className="text-gray-600 dark:text-gray-400">Detailed health insights</p>
+            </Link>
+          </div>
+
+          {/* Quick Stats */}
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 mt-20">
+            {quickStats.map((stat, index) => {
+              const Icon = stat.icon;
+              return (
+                <div key={index} className="glass-effect rounded-2xl p-6 card-hover">
+                  <div className="flex items-center justify-between mb-4">
+                    <Icon className={`h-8 w-8 ${stat.color}`} />
+                    <span className={`text-sm font-medium ${
+                      stat.trend === 'up' ? 'text-green-500' :
+                      stat.trend === 'down' ? 'text-red-500' :
+                      'text-gray-500'
+                    }`}>
+                      {stat.change}
+                    </span>
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
+                    {stat.value}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    {stat.label}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="grid lg:grid-cols-3 gap-8">
+            {/* Recent Readings */}
+            <div className="lg:col-span-2 mt-100">
+              <div className="glass-effect rounded-2xl p-6 card-hover">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Recent Readings</h2>
+                  <Link href="/past-readings" className="text-blue-600 dark:text-blue-400 hover:underline text-sm">
+                    View all →
+                  </Link>
+                </div>
+                <div className="space-y-4">
+                  {recentReadings.map((reading, index) => (
+                    <div key={index} className="flex items-center justify-between p-4 bg-white/50 dark:bg-gray-800/50 rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        <div className={`w-3 h-3 rounded-full ${
+                          reading.status === 'Normal' ? 'bg-green-500' : 'bg-yellow-500'
+                        }`}></div>
+                        <div>
+                          <div className="font-medium text-gray-900 dark:text-white">{reading.status}</div>
+                          <div className="text-sm text-gray-500">{reading.date}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-gray-900 dark:text-white">{reading.heartRate} BPM</div>
+                        <div className="text-sm text-gray-500">{reading.duration}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Health Tips */}
+            <div className="space-y-6">
+              <div className="glass-effect rounded-2xl p-6 card-hover">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center">
+                  <Heart className="h-5 w-5 text-red-500 mr-2" />
+                  Daily Health Tip
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 mb-4">
+                  {healthTips[Math.floor(Math.random() * healthTips.length)]}
+                </p>
+                <div className="text-sm text-blue-600 dark:text-blue-400 font-medium">
+                  💙 Keep your heart healthy!
+                </div>
+              </div>
+
+              {/* Motivational Card */}
+              <div className="glass-effect rounded-2xl p-6 card-hover bg-gradient-to-br from-pink-50 to-red-50 dark:from-pink-900/20 dark:to-red-900/20">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-gradient-to-r from-pink-500 to-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Heart className="h-8 w-8 text-white" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                    You're Doing Great!
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    Your heart health is in excellent condition. Keep up the good work!
+                  </p>
+                  <div className="flex justify-center space-x-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star key={star} className="h-5 w-5 text-yellow-400 fill-current" />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+              </div>
+      </>
+    )
   );
 }

@@ -2,6 +2,8 @@ import './globals.css';
 import { Inter } from 'next/font/google';
 import { ThemeProvider } from '../components/theme-provider';
 import Navigation from '../components/navigation';
+import { AuthProvider } from '../context/authContext';
+import { Toaster } from '../components/ui/toaster';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -14,16 +16,17 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem
-          disableTransitionOnChange={false}
-        >
-          <Navigation />
-          <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-black dark:to-gray-900 transition-colors duration-300">
-            {children}
-          </main>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange={false} >
+
+          <AuthProvider>
+
+            <Navigation />
+            <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-black dark:to-gray-900 transition-colors duration-300">
+              {children}
+            </main>
+            <Toaster />
+
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

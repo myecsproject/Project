@@ -178,7 +178,7 @@ export default function HealthStatusPage() {
                   <div>
                     <div className="text-xl font-semibold">{healthStatus.overall}</div>
                     <div className="text-blue-100">
-                      Last updated: {new Date(healthStatus.lastUpdate).toLocaleDateString()}
+                      Last updated: {new Date(healthStatus.lastUpdate).toLocaleDateString('en-IN')}
                     </div>
                   </div>
                 </div>
@@ -252,7 +252,7 @@ export default function HealthStatusPage() {
                 
                 <div className="flex items-center justify-between">
                   <div className="text-xs text-gray-500 dark:text-gray-400">
-                    Last: {new Date(status.lastReading).toLocaleDateString()}
+                    Last: {new Date(status.lastReading).toLocaleDateString('en-IN')}
                   </div>
                   <div className={`flex items-center space-x-1 ${getTrendColor(status.trend)}`}>
                     <TrendIcon className="h-4 w-4" />

@@ -1,54 +1,94 @@
 "use client";
 
 import { useState } from 'react';
-import { 
-  Heart, 
-  Mail, 
-  Lock, 
-  Eye, 
+import {
+  Heart,
+  Mail,
+  Lock,
+  Eye,
   EyeOff,
-  ArrowRight
+  ArrowRight,
+  User,
+  CheckCircle,
+  X
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { signIn, signInWithSocialProvider } from '../../lib/auth';
+import { signUp, signInWithGoogle, signInWithSocialProvider } from '../../lib/auth';
 import { useToast } from '../../hooks/use-toast';
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    confirmPassword: '',
+    fullName: ''
+  });
   const [error, setError] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
+  const handleInputChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); 
+    setError(''); // Clear any previous errors
 
-    const {error: signInError} = await signIn(email, password);
-    if(signInError){
+    // Validate passwords match
+    if (formData.password !== formData.confirmPassword) {
       toast({
-        title: "Login Failed",
-        description: signInError.message,
+        title: "Validation Error",
+        description: "Passwords do not match",
         variant: "destructive",
       });
       return;
     }
-    router.push('/');
+
+    // Validate password strength
+    if (formData.password.length < 6) {
+      toast({
+        title: "Validation Error",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const {error: signUpError} = await signUp(formData.email, formData.password, formData.fullName);
+    if(signUpError){
+      toast({
+        title: "Registration Failed",
+        description: signUpError.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Success - show success modal
+    setShowSuccessModal(true);
   };
 
   const handleSocialLogin = async (provider) => {
-    setError(''); 
+    setError(''); // Clear any previous errors
     const {data, error: socialError} = await signInWithSocialProvider(provider);
     if(socialError){
       toast({
-        title: "Social Login Failed",
+        title: "Social Registration Failed",
         description: socialError.message,
         variant: "destructive",
       });
       return;
     }
+
+    // router.push('/onboarding');
   };
 
   return (
@@ -61,10 +101,10 @@ export default function LoginPage() {
               <Heart className="h-8 w-8 text-white" />
             </div>
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Welcome Back
+              Create Account
             </h2>
             <p className="text-gray-600 dark:text-gray-300 mt-2">
-              Sign in to access your heart health dashboard
+              Join HeartGuard to monitor your heart health
             </p>
           </div>
 
@@ -92,8 +132,6 @@ export default function LoginPage() {
               </svg>
               Continue with GitHub
             </button>
-
-
           </div>
 
           {/* Divider */}
@@ -103,13 +141,34 @@ export default function LoginPage() {
             </div>
             <div className="relative flex justify-center text-sm">
               <span className="px-2 bg-white dark:bg-gray-800 text-gray-500">
-                Or continue with email
+                Or create account with email
               </span>
             </div>
           </div>
 
-          {/* Email/Password Form */}
+          {/* Registration Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Full Name
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <User className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="fullName"
+                  name="fullName"
+                  type="text"
+                  required
+                  value={formData.fullName}
+                  onChange={handleInputChange}
+                  className="block w-full pl-10 pr-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors duration-200"
+                  placeholder="Enter your full name"
+                />
+              </div>
+            </div>
+
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Email Address
@@ -123,8 +182,8 @@ export default function LoginPage() {
                   name="email"
                   type="email"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={formData.email}
+                  onChange={handleInputChange}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors duration-200"
                   placeholder="Enter your email"
                 />
@@ -144,10 +203,10 @@ export default function LoginPage() {
                   name="password"
                   type={showPassword ? 'text' : 'password'}
                   required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  value={formData.password}
+                  onChange={handleInputChange}
                   className="block w-full pl-10 pr-10 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors duration-200"
-                  placeholder="Enter your password"
+                  placeholder="Create a password"
                 />
                 <button
                   type="button"
@@ -163,13 +222,35 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end ">
-              
-
-              <div className="text-sm flex justify-end items-end">
-                <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
-                  Forgot password?
-                </a>
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Confirm Password
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  value={formData.confirmPassword}
+                  onChange={handleInputChange}
+                  className="block w-full pl-10 pr-10 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors duration-200"
+                  placeholder="Confirm your password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                  ) : (
+                    <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -177,20 +258,45 @@ export default function LoginPage() {
               type="submit"
               className="w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transform hover:scale-105 transition-all duration-200 shadow-lg"
             >
-              Sign In
+              Create Account
               <ArrowRight className="h-5 w-5 ml-2" />
             </button>
           </form>
 
-          {/* Sign up link */}
+          {/* Sign in link */}
           <p className="mt-8 text-center text-sm text-gray-600 dark:text-gray-400">
-            Don't have an account?{' '}
-            <Link href="/register" className="font-medium text-blue-600 hover:text-blue-500">
-              Sign up now
+            Already have an account?{' '}
+            <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
+              Sign in here
             </Link>
           </p>
         </div>
       </div>
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 border border-gray-100 dark:border-gray-700">
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full mb-4">
+                <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                Registration Successful!
+              </h3>
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
+                You have been registered successfully. Please login to continue.
+              </p>
+              <button
+                onClick={() => router.push('/login')}
+                className="w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transform hover:scale-105 transition-all duration-200 shadow-lg"
+              >
+                Go to Login
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

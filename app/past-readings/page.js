@@ -15,6 +15,7 @@ import {
   TrendingUp,
   Search
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 export default function PastReadingsPage() {
   const [selectedFilter, setSelectedFilter] = useState('all');
@@ -138,6 +139,42 @@ export default function PastReadingsPage() {
     avgHeartRate: Math.round(pastReadings.reduce((sum, r) => sum + r.heartRate, 0) / pastReadings.length),
   };
 
+  const exportToExcel = () => {
+    const exportData = filteredReadings.map(reading => ({
+      'Date': new Date(reading.date).toLocaleDateString('en-IN'),
+      'Time': reading.time,
+      'Status': reading.status,
+      'Heart Rate (BPM)': reading.heartRate,
+      'Confidence (%)': reading.confidence,
+      'Risk Level': reading.risk,
+      'Notes': reading.notes
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(exportData);
+
+    // Set column widths
+    const colWidths = [
+      { wch: 12 }, // Date
+      { wch: 8 },  // Time
+      { wch: 20 }, // Status
+      { wch: 15 }, // Heart Rate
+      { wch: 15 }, // Confidence
+      { wch: 12 }, // Risk Level
+      { wch: 30 }  // Notes
+    ];
+    ws['!cols'] = colWidths;
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, 'Heart Readings');
+
+    // Generate filename with current date
+    const fileName = `heart_readings_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    // Save file
+    XLSX.writeFile(wb, fileName);
+  };
+
   return (
     <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
@@ -240,7 +277,10 @@ export default function PastReadingsPage() {
                   className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
+              <button 
+                onClick={exportToExcel}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
+              >
                 <Download className="h-4 w-4" />
                 <span>Export</span>
               </button>
@@ -266,15 +306,11 @@ export default function PastReadingsPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Risk Level
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Duration
-                  </th>
+                  
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Notes
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Actions
-                  </th>
+                 
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -287,7 +323,7 @@ export default function PastReadingsPage() {
                           <Calendar className="h-4 w-4 text-gray-400" />
                           <div>
                             <div className="text-sm font-medium text-gray-900 dark:text-white">
-                              {new Date(reading.date).toLocaleDateString()}
+                              {new Date(reading.date).toLocaleDateString('en-IN')}
                             </div>
                             <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
                               <Clock className="h-3 w-3 mr-1" />
@@ -317,24 +353,13 @@ export default function PastReadingsPage() {
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        {reading.duration}
-                      </td>
+                     
                       <td className="px-6 py-4">
                         <p className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
                           {reading.notes}
                         </p>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex items-center justify-end space-x-2">
-                          <button className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 p-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors duration-200">
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200">
-                            <Download className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
+                      
                     </tr>
                   );
                 })}
