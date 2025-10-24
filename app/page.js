@@ -1,24 +1,48 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/authContext';
+import Loading from '../components/ui/Loading.js';
 
 
 import Link from 'next/link';
-import { 
-  Heart, 
-  Shield, 
-  Activity, 
-  Users, 
-  ArrowRight,
-  CheckCircle,
-  Zap,
-  Clock,
-  TrendingUp,
-  Star
-} from 'lucide-react';
+import {Heart,Shield,Activity,Users,ArrowRight,Zap,Clock,Star} from 'lucide-react';
+import { supabase } from '@/lib/supabase/supabaseBrowserClient';
+import { useRouter } from 'next/navigation';
 
 export default function HomePage() {
-  const { user, loading } = useAuth();
+  const { user, authLoading } = useAuth();
+  const [loading, setLoading] = useState(false)
+  const router = useRouter();
+
+  useEffect(() => {
+    const checkUserProfile = async () => {
+      if (!user) return; 
+
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .single()
+      
+      console.log(data);
+
+      if (error && error.code !== 'PGRST116') { 
+        console.error("Error fetching user profile:", error);        
+        setLoading(false);
+        return;
+      }
+
+      if (!data) {
+        router.push('/onboarding');
+        setLoading(false);
+        return;
+      }
+
+      setLoading(false);
+    };
+
+    checkUserProfile();
+  }, [user]) 
 
   const stats = [
     { number: '10K+', label: 'Active Users' },
@@ -51,37 +75,37 @@ export default function HomePage() {
   ];
 
   const quickStats = [
-    { 
-      icon: Heart, 
-      label: 'Avg Heart Rate', 
-      value: '72 BPM', 
-      change: '+2', 
+    {
+      icon: Heart,
+      label: 'Avg Heart Rate',
+      value: '72 BPM',
+      change: '+2',
       trend: 'up',
-      color: 'text-red-500' 
+      color: 'text-red-500'
     },
-    { 
-      icon: Activity, 
-      label: 'Last Reading', 
-      value: 'Normal', 
-      change: '2h ago', 
+    {
+      icon: Activity,
+      label: 'Last Reading',
+      value: 'Normal',
+      change: '2h ago',
       trend: 'neutral',
-      color: 'text-green-500' 
+      color: 'text-green-500'
     },
-    { 
-      icon: Shield, 
-      label: 'Risk Level', 
-      value: 'Low', 
-      change: 'Stable', 
+    {
+      icon: Shield,
+      label: 'Risk Level',
+      value: 'Low',
+      change: 'Stable',
       trend: 'stable',
-      color: 'text-blue-500' 
+      color: 'text-blue-500'
     },
-    { 
-      icon: Clock, 
-      label: 'Weekly Checks', 
-      value: '5/7', 
-      change: '2 left', 
+    {
+      icon: Clock,
+      label: 'Weekly Checks',
+      value: '5/7',
+      change: '2 left',
       trend: 'neutral',
-      color: 'text-purple-500' 
+      color: 'text-purple-500'
     },
   ];
 
@@ -98,34 +122,9 @@ export default function HomePage() {
     "Get enough sleep - aim for 7-9 hours of quality sleep per night"
   ];
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl mb-6">
-            <Heart className="h-8 w-8 text-white animate-pulse" />
-          </div>
-          <div className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            Loading HeartGuard...
-          </div>
-          <div className="text-gray-600 dark:text-gray-400">
-            Checking authentication status
-          </div>
-          <div className="mt-4 flex justify-center space-x-1">
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
-                style={{ animationDelay: `${i * 0.1}s` }}
-              ></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (authLoading || loading) return <Loading />
 
-  return ( !user ? ( <>
+  return (!user ? (<>
     <div className="min-h-screen">
       {/* Hero Section */}
       <section className="px-4 py-20 sm:px-6 lg:px-8">
@@ -136,19 +135,19 @@ export default function HomePage() {
               AI-Powered Heart Protection
             </span>
           </div>
-          
+
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 dark:text-white mb-6">
             Protect Your{' '}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-pink-600">
               Heart Health
             </span>
           </h1>
-          
+
           <p className="text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed">
-            Advanced AI-powered heart abnormality detection system that provides real-time analysis, 
+            Advanced AI-powered heart abnormality detection system that provides real-time analysis,
             early warning signs, and personalized health insights to keep your heart beating strong.
           </p>
-          
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
             <Link
               href="/take-reading"
@@ -158,7 +157,7 @@ export default function HomePage() {
               Start Heart Scan
               <ArrowRight className="h-5 w-5 ml-2" />
             </Link>
-            
+
             <Link
               href="/instructions"
               className="inline-flex items-center justify-center px-8 py-4 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-semibold rounded-lg border-2 border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 transition-all duration-200"
@@ -191,11 +190,11 @@ export default function HomePage() {
               Why Choose HeartGuard?
             </h2>
             <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-              Our advanced technology combines medical expertise with AI precision to provide 
+              Our advanced technology combines medical expertise with AI precision to provide
               unmatched heart health monitoring.
             </p>
           </div>
-          
+
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             {features.map((feature, index) => {
               const Icon = feature.icon;
@@ -242,10 +241,10 @@ export default function HomePage() {
         </div>
       </section>
     </div>
-    </>):(
-      <>
+  </>) : (
+    <>
       <div className="min-h-screen bg-white dark:bg-gray-900 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto relative z-10">
+        <div className="max-w-7xl mx-auto relative z-10">
           {/* Welcome Header */}
           <div className="text-center mb-12 slide-up mt-16">
             <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl mb-6 float-animation">
@@ -258,7 +257,7 @@ export default function HomePage() {
               Your heart health dashboard is ready. Let's keep your heart beating strong and healthy.
             </p>
             <div className="flex items-center justify-center space-x-6 mt-6">
-              
+
               <div className="flex items-center space-x-2 text-sm text-blue-600">
                 <Shield className="h-4 w-4" />
                 <span>Protected 24/7</span>
@@ -310,11 +309,10 @@ export default function HomePage() {
                 <div key={index} className="glass-effect rounded-2xl p-6 card-hover">
                   <div className="flex items-center justify-between mb-4">
                     <Icon className={`h-8 w-8 ${stat.color}`} />
-                    <span className={`text-sm font-medium ${
-                      stat.trend === 'up' ? 'text-green-500' :
+                    <span className={`text-sm font-medium ${stat.trend === 'up' ? 'text-green-500' :
                       stat.trend === 'down' ? 'text-red-500' :
-                      'text-gray-500'
-                    }`}>
+                        'text-gray-500'
+                      }`}>
                       {stat.change}
                     </span>
                   </div>
@@ -343,9 +341,8 @@ export default function HomePage() {
                   {recentReadings.map((reading, index) => (
                     <div key={index} className="flex items-center justify-between p-4 bg-white/50 dark:bg-gray-800/50 rounded-lg">
                       <div className="flex items-center space-x-4">
-                        <div className={`w-3 h-3 rounded-full ${
-                          reading.status === 'Normal' ? 'bg-green-500' : 'bg-yellow-500'
-                        }`}></div>
+                        <div className={`w-3 h-3 rounded-full ${reading.status === 'Normal' ? 'bg-green-500' : 'bg-yellow-500'
+                          }`}></div>
                         <div>
                           <div className="font-medium text-gray-900 dark:text-white">{reading.status}</div>
                           <div className="text-sm text-gray-500">{reading.date}</div>
@@ -398,8 +395,8 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-              </div>
-      </>
-    )
+      </div>
+    </>
+  )
   );
 }

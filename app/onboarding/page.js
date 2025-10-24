@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Heart, 
-  Activity, 
+import {
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  Heart,
+  Activity,
   Calendar,
   ArrowRight,
   ArrowLeft,
@@ -16,27 +16,82 @@ import {
   Sparkles
 } from 'lucide-react';
 
+import { useAuth } from '@/context/authContext';
+import { supabase } from '@/lib/supabase/supabaseBrowserClient';
+import { useRouter } from 'next/navigation';
+
+
 export default function ProfileSetupPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     // Personal Info
-    firstName: '',
-    lastName: '',
+    fullName: '',
     dateOfBirth: '',
     gender: '',
-    
+
     // Contact Info
     email: '',
     phone: '',
     address: '',
     emergencyContact: '',
-    
+
     // Health Info
     medicalConditions: [],
     medications: '',
     allergies: '',
     previousHeartIssues: '',
   });
+  const [loading, setLoading] = useState(false);
+
+  const { user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    const populateUserData = () => {
+      if (!user) return;
+      setFormData(prev => ({
+        ...prev,
+        email: user?.user_metadata?.email || '',
+        fullName: user?.user_metadata?.full_name || ''
+      }));
+    };
+
+    populateUserData();
+    console.log(user);
+  }, [user])
+
+
+  useEffect(() => {
+    const checkUserProfile = async () => {
+      if (!user) return; // Don't run if user is not authenticated
+
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .single()
+
+      console.log("data", data);
+
+      if (error && error.code !== 'PGRST116') {
+        console.error("Error fetching user profile:", error);
+        setLoading(false);
+        return;
+      }
+
+      // If no data (user not found), redirect to onboarding
+      if (data) {
+        router.push('/');
+        setLoading(false);
+        return;
+      }
+
+      setLoading(false);
+    };
+
+    checkUserProfile();
+  }, [user])
+
 
   const totalSteps = 4;
 
@@ -106,10 +161,57 @@ export default function ProfileSetupPage() {
     }
   };
 
+  const handleSubmit = async () => {
+    if (!user) {
+      console.error('No user found');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Transform form data to match database schema
+      const userData = {
+        fullName: formData.fullName,
+        dob: formData.dateOfBirth ? new Date(formData.dateOfBirth).toISOString().split('T')[0] : null,
+        gender: formData.gender,
+        phone_no: formData.phone,
+        email: formData.email,
+        address: formData.address,
+        medical_conditions: formData.medicalConditions.length > 0 ? formData.medicalConditions : null,
+        current_medications: formData.medications || null,
+        allergies: formData.allergies || null,
+        previous_heart_issues: formData.previousHeartIssues || null,
+      };
+
+      console.log('Submitting user data:', userData);
+
+      const { data, error } = await supabase
+        .from('users')
+        .insert([userData])
+        .select();
+
+      if (error) {
+        console.error('Error inserting user data:', error);
+        alert('Failed to save profile. Please try again.');
+        return;
+      }
+
+      console.log('Profile saved successfully:', data);
+      setCurrentStep(4); // Move to completion step
+
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      alert('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const isStepValid = () => {
     switch (currentStep) {
       case 1:
-        return formData.firstName && formData.lastName && formData.dateOfBirth && formData.gender;
+        return formData.fullName && formData.dateOfBirth && formData.gender;
       case 2:
         return formData.email && formData.phone && formData.address;
       case 3:
@@ -129,31 +231,20 @@ export default function ProfileSetupPage() {
             exit={{ opacity: 0, x: -50 }}
             className="space-y-6"
           >
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className=" gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  First Name *
+                  Full Name *
                 </label>
                 <input
                   type="text"
-                  value={formData.firstName}
-                  onChange={(e) => handleInputChange('firstName', e.target.value)}
+                  value={formData.fullName}
+                  onChange={(e) => handleInputChange('fullName', e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter your first name"
+                  placeholder="Enter your full name"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Last Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.lastName}
-                  onChange={(e) => handleInputChange('lastName', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter your last name"
-                />
-              </div>
+
             </div>
 
             <div>
@@ -178,11 +269,10 @@ export default function ProfileSetupPage() {
                     key={gender}
                     type="button"
                     onClick={() => handleInputChange('gender', gender)}
-                    className={`px-4 py-3 rounded-lg border-2 transition-all duration-200 ${
-                      formData.gender === gender
+                    className={`px-4 py-3 rounded-lg border-2 transition-all duration-200 ${formData.gender === gender
                         ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
                         : 'border-gray-300 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500'
-                    }`}
+                      }`}
                   >
                     {gender}
                   </button>
@@ -281,11 +371,10 @@ export default function ProfileSetupPage() {
                     key={condition}
                     type="button"
                     onClick={() => handleMedicalConditionToggle(condition)}
-                    className={`px-4 py-3 rounded-lg border-2 text-left transition-all duration-200 ${
-                      formData.medicalConditions.includes(condition)
+                    className={`px-4 py-3 rounded-lg border-2 text-left transition-all duration-200 ${formData.medicalConditions.includes(condition)
                         ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
                         : 'border-gray-300 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500'
-                    }`}
+                      }`}
                   >
                     {condition}
                   </button>
@@ -349,7 +438,7 @@ export default function ProfileSetupPage() {
             >
               <CheckCircle className="h-12 w-12 text-white" />
             </motion.div>
-            
+
             <motion.h2
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -358,14 +447,14 @@ export default function ProfileSetupPage() {
             >
               Profile Setup Complete!
             </motion.h2>
-            
+
             <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 }}
               className="text-lg text-gray-600 dark:text-gray-300 mb-8"
             >
-              Welcome to HeartGuard, {formData.firstName}! Your profile has been successfully created.
+              Welcome to HeartGuard, {formData.fullName}! Your profile has been successfully created.
             </motion.p>
 
             <motion.div
@@ -398,7 +487,7 @@ export default function ProfileSetupPage() {
                 <Activity className="h-5 w-5 mr-2" />
                 Take First Reading
               </button>
-              
+
               <button
                 onClick={() => window.location.href = '/'}
                 className="flex items-center justify-center px-8 py-4 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-semibold rounded-lg border-2 border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 transition-all duration-200"
@@ -434,33 +523,31 @@ export default function ProfileSetupPage() {
               const Icon = step.icon;
               const isActive = currentStep === step.id;
               const isCompleted = currentStep > step.id;
-              
+
               return (
                 <div key={step.id} className="flex items-center">
-                  <div className={`flex items-center justify-center w-12 h-12 rounded-full border-2 transition-all duration-300 ${
-                    isCompleted 
-                      ? 'bg-green-500 border-green-500 text-white' 
-                      : isActive 
-                        ? 'bg-blue-500 border-blue-500 text-white' 
+                  <div className={`flex items-center justify-center w-12 h-12 rounded-full border-2 transition-all duration-300 ${isCompleted
+                      ? 'bg-green-500 border-green-500 text-white'
+                      : isActive
+                        ? 'bg-blue-500 border-blue-500 text-white'
                         : 'border-gray-300 dark:border-gray-600 text-gray-400'
-                  }`}>
+                    }`}>
                     {isCompleted ? (
                       <CheckCircle className="h-6 w-6" />
                     ) : (
                       <Icon className="h-6 w-6" />
                     )}
                   </div>
-                  
+
                   {index < steps.length - 1 && (
-                    <div className={`flex-1 h-1 mx-4 rounded transition-all duration-300 ${
-                      isCompleted ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'
-                    }`} />
+                    <div className={`flex-1 h-1 mx-4 rounded transition-all duration-300 ${isCompleted ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'
+                      }`} />
                   )}
                 </div>
               );
             })}
           </div>
-          
+
           <div className="text-center">
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">
               {steps[currentStep - 1]?.title}
@@ -483,27 +570,25 @@ export default function ProfileSetupPage() {
               <button
                 onClick={prevStep}
                 disabled={currentStep === 1}
-                className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
-                  currentStep === 1
+                className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-medium transition-all duration-200 ${currentStep === 1
                     ? 'text-gray-400 cursor-not-allowed'
                     : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
+                  }`}
               >
                 <ArrowLeft className="h-5 w-5" />
                 <span>Back</span>
               </button>
 
               <button
-                onClick={nextStep}
-                disabled={!isStepValid()}
-                className={`flex items-center space-x-2 px-8 py-3 rounded-lg font-semibold transition-all duration-200 ${
-                  isStepValid()
+                onClick={currentStep === 3 ? handleSubmit : nextStep}
+                disabled={!isStepValid() || loading}
+                className={`flex items-center space-x-2 px-8 py-3 rounded-lg font-semibold transition-all duration-200 ${isStepValid() && !loading
                     ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 transform hover:scale-105 shadow-lg'
                     : 'bg-gray-300 dark:bg-gray-600 text-gray-500 cursor-not-allowed'
-                }`}
+                  }`}
               >
-                <span>{currentStep === 3 ? 'Complete Setup' : 'Next'}</span>
-                <ArrowRight className="h-5 w-5" />
+                <span>{loading ? 'Saving...' : currentStep === 3 ? 'Complete Setup' : 'Next'}</span>
+                {!loading && <ArrowRight className="h-5 w-5" />}
               </button>
             </div>
           )}

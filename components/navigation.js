@@ -21,7 +21,6 @@ export default function Navigation() {
 
   useEffect(() => {
     setUser(userData)
-    console.log(userData)
   }, [userData])
 
   useEffect(() => {
@@ -129,12 +128,25 @@ export default function Navigation() {
                 )}
               </Link>
 
+
               <button className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all duration-200 ml-4" onClick={handleLogout}>
                 <LogOut className="h-4 w-4" />
                 <span className="text-sm font-medium">Logout</span>
               </button>
             </>
             )}
+              <Link
+                href="/profile"
+                className="flex items-center ml-4"
+                title="Profile"
+              >
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${isActive('/profile')
+                    ? 'bg-gradient-to-br from-blue-500 to-indigo-600 ring-2 ring-blue-400 ring-offset-2 ring-offset-white dark:ring-offset-gray-900'
+                    : 'bg-gradient-to-br from-blue-400 to-indigo-500 hover:from-blue-500 hover:to-indigo-600 hover:scale-105'
+                  }`}>
+                  <User className="h-5 w-5 text-white" />
+                </div>
+              </Link>
             {!user && (<>
               <Link
                 href="/instructions"
@@ -272,6 +284,18 @@ export default function Navigation() {
                     <Shield className="h-5 w-5" />
                     <span>Health Status</span>
                   </Link> */}
+
+                  <Link
+                    href="/profile"
+                    onClick={() => setIsMenuOpen(false)}
+                    className={`flex items-center space-x-3 px-4 py-3 mx-2 rounded-lg transition-all duration-200 ${isActive('/profile')
+                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      }`}
+                  >
+                    <User className="h-5 w-5" />
+                    <span>Profile</span>
+                  </Link>
 
                   <button
                     onClick={() => {

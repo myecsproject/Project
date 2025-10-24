@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   Activity, 
-  Play, 
-  Pause, 
+  Play,  
   Square,
   Heart,
   Clock,
