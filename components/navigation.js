@@ -128,13 +128,6 @@ export default function Navigation() {
                 )}
               </Link>
 
-
-              <button className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all duration-200 ml-4" onClick={handleLogout}>
-                <LogOut className="h-4 w-4" />
-                <span className="text-sm font-medium">Logout</span>
-              </button>
-            </>
-            )}
               <Link
                 href="/profile"
                 className="flex items-center ml-4"
@@ -147,6 +140,13 @@ export default function Navigation() {
                   <User className="h-5 w-5 text-white" />
                 </div>
               </Link>
+
+              <button className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all duration-200 ml-4" onClick={handleLogout}>
+                <LogOut className="h-4 w-4" />
+                <span className="text-sm font-medium">Logout</span>
+              </button>
+            </>
+            )}
             {!user && (<>
               <Link
                 href="/instructions"
