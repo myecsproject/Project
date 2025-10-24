@@ -79,7 +79,7 @@ export default function ProfileSetupPage() {
         return;
       }
 
-      // If no data (user not found), redirect to onboarding
+      // If no data (user not found),  to onboarding
       if (data) {
         router.push('/');
         setLoading(false);

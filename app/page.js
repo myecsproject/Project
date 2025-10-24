@@ -150,11 +150,11 @@ export default function HomePage() {
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
             <Link
-              href="/take-reading"
+              href="/login"
               className="inline-flex items-center justify-center px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transform hover:scale-105 transition-all duration-200 shadow-lg"
             >
               <Activity className="h-5 w-5 mr-2" />
-              Start Heart Scan
+              Login to get Started
               <ArrowRight className="h-5 w-5 ml-2" />
             </Link>
 
