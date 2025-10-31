@@ -33,19 +33,36 @@ export default function TakeReadingPage() {
   const [liveHeartRate, setLiveHeartRate] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [recordedData, setRecordedData] = useState([]);
+  const [connectionError, setConnectionError] = useState(null);
   const pollingRef = useRef(null);
+  const errorCountRef = useRef(0);
 
-  // Poll ESP32 data continuously
+  // Poll ESP32 data continuously with improved error handling
   useEffect(() => {
     const pollData = async () => {
       try {
-        const response = await fetch('/api/ecg-data');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+        
+        const response = await fetch('/api/ecg-data', {
+          signal: controller.signal,
+          cache: 'no-store'
+        });
+        
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const result = await response.json();
 
-        if (result.success && result.data.ecg) {
+        if (result.success && result.connected && result.data.ecg) {
           setLiveECGData(result.data.ecg);
           setLiveHeartRate(result.data.heartRate);
           setIsConnected(true);
+          setConnectionError(null);
+          errorCountRef.current = 0;
 
           // If recording, save the data
           if (isRecording) {
@@ -56,16 +73,33 @@ export default function TakeReadingPage() {
             }]);
           }
         } else {
+          // Data is stale or no data available
           setIsConnected(false);
+          if (!result.connected) {
+            setConnectionError('ESP32 connection lost (no recent data)');
+          }
         }
       } catch (error) {
-        console.error('Error fetching ECG data:', error);
+        errorCountRef.current++;
+        console.error('Error fetching ECG data:', error.message);
         setIsConnected(false);
+        
+        if (error.name === 'AbortError') {
+          setConnectionError('Connection timeout - check server');
+        } else {
+          setConnectionError(`Connection error: ${error.message}`);
+        }
+
+        // Clear data if too many errors
+        if (errorCountRef.current > 3) {
+          setLiveECGData(null);
+          setLiveHeartRate(null);
+        }
       }
     };
 
-    // Poll every 500ms
-    pollingRef.current = setInterval(pollData, 500);
+    // Poll every 800ms (slightly faster for better real-time feel)
+    pollingRef.current = setInterval(pollData, 800);
     pollData(); // Initial fetch
 
     return () => {
@@ -657,17 +691,31 @@ export default function TakeReadingPage() {
                   )}
                 </div>
 
-                <div className="relative overflow-hidden bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-4 border border-green-100 dark:border-green-800/50">
+                <div className={`relative overflow-hidden rounded-xl p-4 border ${
+                  isConnected 
+                    ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-100 dark:border-green-800/50' 
+                    : 'bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border-red-100 dark:border-red-800/50'
+                }`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <Zap className={`h-6 w-6 text-green-500 ${isConnected ? 'animate-pulse' : ''}`} />
+                      {isConnected ? (
+                        <Zap className="h-6 w-6 text-green-500 animate-pulse" />
+                      ) : (
+                        <WifiOff className="h-6 w-6 text-red-500" />
+                      )}
                       <div>
                         <span className="font-semibold text-gray-900 dark:text-white">Signal Quality</span>
-                        <p className="text-xs text-gray-500">Connection strength</p>
+                        <p className="text-xs text-gray-500">
+                          {isConnected ? 'Connection strength' : (connectionError || 'Not connected')}
+                        </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                      <span className={`text-lg font-bold ${
+                        isConnected 
+                          ? 'text-green-600 dark:text-green-400' 
+                          : 'text-red-600 dark:text-red-400'
+                      }`}>
                         {isConnected ? 'Excellent' : 'No Signal'}
                       </span>
                     </div>
