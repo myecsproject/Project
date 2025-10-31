@@ -254,7 +254,7 @@ export default function HomePage() {
               Welcome back, {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}!
             </h1>
             <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-              Your heart health dashboard is ready. Let's keep your heart beating strong and healthy.
+              Your heart health dashboard is ready. Let&apos;s keep your heart beating strong and healthy.
             </p>
             <div className="flex items-center justify-center space-x-6 mt-6">
 
@@ -380,7 +380,7 @@ export default function HomePage() {
                     <Heart className="h-8 w-8 text-white" />
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                    You're Doing Great!
+                    You&apos;re Doing Great!
                   </h3>
                   <p className="text-gray-600 dark:text-gray-400 mb-4">
                     Your heart health is in excellent condition. Keep up the good work!
