@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',
-  eslint: {
+  // Removed 'output: export' to enable custom server
+
+int: {
     ignoreDuringBuilds: true,
   },
   images: { unoptimized: true },

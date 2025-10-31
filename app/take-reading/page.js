@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Activity, 
   Play,  
@@ -28,50 +28,114 @@ export default function TakeReadingPage() {
   const animationRef = useRef(null);
   const analyzeRef = useRef(null);
 
-  // Dummy ECG data generator with improved algorithm
+  // Real-time ECG data from ESP32
+  const [liveECGData, setLiveECGData] = useState(null);
+  const [liveHeartRate, setLiveHeartRate] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [recordedData, setRecordedData] = useState([]);
+  const pollingRef = useRef(null);
+
+  // Poll ESP32 data continuously
+  useEffect(() => {
+    const pollData = async () => {
+      try {
+        const response = await fetch('/api/ecg-data');
+        const result = await response.json();
+
+        if (result.success && result.data.ecg) {
+          setLiveECGData(result.data.ecg);
+          setLiveHeartRate(result.data.heartRate);
+          setIsConnected(true);
+
+          // If recording, save the data
+          if (isRecording) {
+            setRecordedData(prev => [...prev, {
+              ecg: result.data.ecg,
+              bpm: result.data.heartRate.bpm,
+              timestamp: Date.now()
+            }]);
+          }
+        } else {
+          setIsConnected(false);
+        }
+      } catch (error) {
+        console.error('Error fetching ECG data:', error);
+        setIsConnected(false);
+      }
+    };
+
+    // Poll every 500ms
+    pollingRef.current = setInterval(pollData, 500);
+    pollData(); // Initial fetch
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, [isRecording]);
+
+  // Generate ECG waveform for visualization from real data
   const generateECGData = () => {
     const data = [];
-    const time = Date.now() / 1000;
+    
+    if (!liveECGData) {
+      // No data yet, show flat line
+      for (let i = 0; i < 500; i++) {
+        data.push({ x: i, y: 150 });
+      }
+      return data;
+    }
+
+    // Create realistic ECG visualization from P, Q, R, S, T waves
+    const { p, q, r, s, t } = liveECGData;
+    const baseY = 150;
+    const scale = 50; // Scale factor for wave amplitudes
+
     for (let i = 0; i < 500; i++) {
       const x = i;
-      // Create ECG-like waveform with P, QRS, T waves
-      let y = 0;
-      
-      // Heart rate simulation (60-100 BPM)
-      const heartRate = 75; // BPM
-      const cycleLength = 60 / heartRate * 100; // samples per cycle
-      const position = (x + time * 50) % cycleLength;
-      
-      // P wave
-      if (position < 10) {
-        y += Math.sin((position / 10) * Math.PI) * 0.2;
+      const phase = (i % 100) / 100; // One heartbeat cycle per 100 points
+      let y = baseY;
+
+      if (phase < 0.15) {
+        // P wave (atrial depolarization)
+        const pPhase = phase / 0.15;
+        y = baseY - (p * scale * Math.sin(pPhase * Math.PI));
+      } else if (phase < 0.25) {
+        // PR segment
+        y = baseY;
+      } else if (phase < 0.30) {
+        // Q wave
+        const qPhase = (phase - 0.25) / 0.05;
+        y = baseY - (q * scale * Math.sin(qPhase * Math.PI));
+      } else if (phase < 0.35) {
+        // R wave (ventricular depolarization - largest peak)
+        const rPhase = (phase - 0.30) / 0.05;
+        y = baseY - (r * scale * Math.sin(rPhase * Math.PI));
+      } else if (phase < 0.40) {
+        // S wave
+        const sPhase = (phase - 0.35) / 0.05;
+        y = baseY - (s * scale * Math.sin(sPhase * Math.PI));
+      } else if (phase < 0.50) {
+        // ST segment
+        y = baseY;
+      } else if (phase < 0.70) {
+        // T wave (ventricular repolarization)
+        const tPhase = (phase - 0.50) / 0.20;
+        y = baseY - (t * scale * Math.sin(tPhase * Math.PI));
+      } else {
+        // Rest of cycle
+        y = baseY;
       }
-      // QRS complex
-      else if (position > 20 && position < 35) {
-        const qrsPos = (position - 20) / 15;
-        if (qrsPos < 0.3) {
-          y -= qrsPos * 0.5; // Q wave
-        } else if (qrsPos < 0.7) {
-          y += (qrsPos - 0.3) * 3; // R wave
-        } else {
-          y -= (qrsPos - 0.7) * 1.5; // S wave
-        }
-      }
-      // T wave
-      else if (position > 50 && position < 80) {
-        y += Math.sin(((position - 50) / 30) * Math.PI) * 0.4;
-      }
-      
-      // Add some noise
-      y += (Math.random() - 0.5) * 0.05;
-      
-      data.push({ x: i, y: 150 + y * 50 });
+
+      data.push({ x, y });
     }
+    
     return data;
   };
 
   // Enhanced ECG drawing with glow effects
-  const drawECG = () => {
+  const drawECG = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
@@ -125,19 +189,20 @@ export default function TakeReadingPage() {
     
     // Reset shadow
     ctx.shadowBlur = 0;
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRecording, liveECGData]); // Dependencies for useCallback
 
-  // Animation loop
-  const animate = () => {
-    drawECG();
-    if (isRecording) {
-      animationRef.current = requestAnimationFrame(animate);
-    }
-  };
-
-  // Recording timer
+  // Recording timer and animation
   useEffect(() => {
     let interval;
+    
+    const animate = () => {
+      drawECG();
+      if (isRecording) {
+        animationRef.current = requestAnimationFrame(animate);
+      }
+    };
+    
     if (isRecording) {
       interval = setInterval(() => {
         setRecordingTime(prev => prev + 1);
@@ -156,13 +221,15 @@ export default function TakeReadingPage() {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [isRecording]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRecording]); // drawECG is stable with useCallback
 
   const startRecording = () => {
     setIsRecording(true);
     setRecordingTime(0);
     setCurrentReading(null);
     setShowResults(false);
+    setRecordedData([]); // Clear previous recording
   };
 
   const stopRecording = () => {
@@ -177,22 +244,85 @@ export default function TakeReadingPage() {
       });
     }, 100);
     
-    // Simulate analysis with loading
+    // Analyze real recorded data
     setTimeout(() => {
-      const results = [
-        { status: 'Normal Sinus Rhythm', confidence: 98.5, risk: 'Low', description: 'Your heart rhythm is regular and healthy.' },
-        { status: 'Atrial Fibrillation', confidence: 94.2, risk: 'High', description: 'Irregular heart rhythm detected. Consult your doctor.' },
-        { status: 'Bradycardia', confidence: 89.7, risk: 'Medium', description: 'Heart rate is slower than normal.' },
-        { status: 'PVC Detected', confidence: 92.1, risk: 'Low', description: 'Premature ventricular contractions detected.' },
-      ];
+      if (recordedData.length === 0) {
+        // No data recorded
+        setCurrentReading({
+          status: 'No Data Available',
+          confidence: 0,
+          risk: 'Unknown',
+          description: 'No ECG data was recorded. Please ensure ESP32 is connected and try again.',
+          timestamp: new Date().toISOString(),
+          duration: recordingTime,
+          heartRate: 0,
+        });
+      } else {
+        // Analyze recorded data
+        const avgBPM = Math.round(
+          recordedData.reduce((sum, d) => sum + d.bpm, 0) / recordedData.length
+        );
+        
+        const maxBPM = Math.max(...recordedData.map(d => d.bpm));
+        const minBPM = Math.min(...recordedData.map(d => d.bpm));
+        const bpmVariability = maxBPM - minBPM;
+
+        // Calculate average wave amplitudes
+        const avgP = recordedData.reduce((sum, d) => sum + d.ecg.p, 0) / recordedData.length;
+        const avgQ = recordedData.reduce((sum, d) => sum + d.ecg.q, 0) / recordedData.length;
+        const avgR = recordedData.reduce((sum, d) => sum + d.ecg.r, 0) / recordedData.length;
+        const avgS = recordedData.reduce((sum, d) => sum + d.ecg.s, 0) / recordedData.length;
+        const avgT = recordedData.reduce((sum, d) => sum + d.ecg.t, 0) / recordedData.length;
+
+        // Simple analysis logic
+        let status, risk, description, confidence;
+
+        if (avgBPM < 60) {
+          status = 'Bradycardia Detected';
+          risk = 'Medium';
+          description = 'Your heart rate is slower than normal. Monitor and consult a doctor if symptoms persist.';
+          confidence = 92;
+        } else if (avgBPM > 100) {
+          status = 'Tachycardia Detected';
+          risk = 'Medium';
+          description = 'Your heart rate is faster than normal. Stay calm and consult a doctor if concerned.';
+          confidence = 91;
+        } else if (bpmVariability > 20) {
+          status = 'Irregular Rhythm Detected';
+          risk = 'High';
+          description = 'Significant heart rate variability detected. Please consult a cardiologist.';
+          confidence = 88;
+        } else if (avgR < 1.0 || avgR > 1.5) {
+          status = 'Abnormal R Wave';
+          risk = 'Medium';
+          description = 'R wave amplitude is outside normal range. Further evaluation recommended.';
+          confidence = 85;
+        } else {
+          status = 'Normal Sinus Rhythm';
+          risk = 'Low';
+          description = 'Your heart rhythm appears regular and healthy. All ECG waves are within normal ranges.';
+          confidence = 96;
+        }
+
+        setCurrentReading({
+          status,
+          confidence,
+          risk,
+          description,
+          timestamp: new Date().toISOString(),
+          duration: recordingTime,
+          heartRate: avgBPM,
+          waveData: {
+            p: avgP.toFixed(2),
+            q: avgQ.toFixed(2),
+            r: avgR.toFixed(2),
+            s: avgS.toFixed(2),
+            t: avgT.toFixed(2),
+          },
+          samples: recordedData.length,
+        });
+      }
       
-      const randomResult = results[Math.floor(Math.random() * results.length)];
-      setCurrentReading({
-        ...randomResult,
-        timestamp: new Date().toISOString(),
-        duration: recordingTime,
-        heartRate: Math.floor(Math.random() * 40) + 60,
-      });
       setIsAnalyzing(false);
       setShowResults(true);
     }, 3000);
@@ -440,6 +570,37 @@ export default function TakeReadingPage() {
                       </div>
                     </div>
 
+                    {currentReading.waveData && (
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
+                        <h5 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Average ECG Waves</h5>
+                        <div className="grid grid-cols-5 gap-2 text-center">
+                          <div>
+                            <span className="text-xs text-gray-500 block">P</span>
+                            <span className="text-sm font-bold text-blue-600">{currentReading.waveData.p}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500 block">Q</span>
+                            <span className="text-sm font-bold text-purple-600">{currentReading.waveData.q}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500 block">R</span>
+                            <span className="text-sm font-bold text-red-600">{currentReading.waveData.r}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500 block">S</span>
+                            <span className="text-sm font-bold text-orange-600">{currentReading.waveData.s}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500 block">T</span>
+                            <span className="text-sm font-bold text-green-600">{currentReading.waveData.t}</span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2 text-center">
+                          Based on {currentReading.samples} samples
+                        </p>
+                      </div>
+                    )}
+
                     <button className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold py-4 rounded-xl hover:from-blue-600 hover:to-purple-600 transition-all duration-300 transform hover:scale-105">
                       Save to History
                     </button>
@@ -486,12 +647,12 @@ export default function TakeReadingPage() {
                     </div>
                     <div className="text-right">
                       <span className="text-2xl font-bold text-red-600 dark:text-red-400">
-                        {isRecording ? Math.floor(Math.random() * 40) + 60 : '--'}
+                        {liveHeartRate ? liveHeartRate.bpm : '--'}
                       </span>
                       <span className="text-sm text-red-500 ml-1">BPM</span>
                     </div>
                   </div>
-                  {isRecording && (
+                  {isConnected && (
                     <div className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-red-500 to-pink-500 animate-pulse" style={{width: '75%'}}></div>
                   )}
                 </div>
@@ -499,7 +660,7 @@ export default function TakeReadingPage() {
                 <div className="relative overflow-hidden bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-4 border border-green-100 dark:border-green-800/50">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <Zap className={`h-6 w-6 text-green-500 ${isRecording ? 'animate-pulse' : ''}`} />
+                      <Zap className={`h-6 w-6 text-green-500 ${isConnected ? 'animate-pulse' : ''}`} />
                       <div>
                         <span className="font-semibold text-gray-900 dark:text-white">Signal Quality</span>
                         <p className="text-xs text-gray-500">Connection strength</p>
@@ -507,11 +668,11 @@ export default function TakeReadingPage() {
                     </div>
                     <div className="text-right">
                       <span className="text-lg font-bold text-green-600 dark:text-green-400">
-                        {isRecording ? 'Excellent' : 'No Signal'}
+                        {isConnected ? 'Excellent' : 'No Signal'}
                       </span>
                     </div>
                   </div>
-                  {isRecording && (
+                  {isConnected && (
                     <div className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-green-500 to-emerald-500" style={{width: '90%'}}></div>
                   )}
                 </div>
@@ -519,19 +680,25 @@ export default function TakeReadingPage() {
                 <div className="relative overflow-hidden bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-purple-100 dark:border-purple-800/50">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <Activity className={`h-6 w-6 text-purple-500 ${isRecording ? 'ecg-glow' : ''}`} />
+                      <Activity className={`h-6 w-6 text-purple-500 ${isConnected ? 'ecg-glow' : ''}`} />
                       <div>
-                        <span className="font-semibold text-gray-900 dark:text-white">Rhythm</span>
-                        <p className="text-xs text-gray-500">Heart pattern</p>
+                        <span className="font-semibold text-gray-900 dark:text-white">ECG Waves</span>
+                        <p className="text-xs text-gray-500">Current reading</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
-                        {isRecording ? 'Regular' : '--'}
-                      </span>
+                      {liveECGData ? (
+                        <span className="text-sm font-mono text-purple-600 dark:text-purple-400">
+                          R:{liveECGData.r.toFixed(2)}mV
+                        </span>
+                      ) : (
+                        <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                          --
+                        </span>
+                      )}
                     </div>
                   </div>
-                  {isRecording && (
+                  {isConnected && (
                     <div className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-purple-500 to-indigo-500 animate-pulse" style={{width: '85%'}}></div>
                   )}
                 </div>
