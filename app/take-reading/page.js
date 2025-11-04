@@ -15,15 +15,23 @@ import {
   TrendingUp,
   Shield,
   Users,
-  Star
+  Star,
+  Save,
+  Download
 } from 'lucide-react';
+import { useAuth } from '@/context/authContext';
+import { supabase } from '@/lib/supabase/supabaseBrowserClient';
+
+const MAX_RECORDING_TIME = 60; // 60 seconds
 
 export default function TakeReadingPage() {
+  const { user } = useAuth();
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [currentReading, setCurrentReading] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
   const analyzeRef = useRef(null);
@@ -36,13 +44,17 @@ export default function TakeReadingPage() {
   const [connectionError, setConnectionError] = useState(null);
   const pollingRef = useRef(null);
   const errorCountRef = useRef(0);
+  
+  // For real-time graph scrolling
+  const [ecgDataPoints, setEcgDataPoints] = useState([]);
+  const MAX_DATA_POINTS = 500;
 
   // Poll ESP32 data continuously with improved error handling
   useEffect(() => {
     const pollData = async () => {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // ✅ 5 second timeout for reliability
         
         const response = await fetch('/api/ecg-data', {
           signal: controller.signal,
@@ -57,49 +69,74 @@ export default function TakeReadingPage() {
 
         const result = await response.json();
 
-        if (result.success && result.connected && result.data.ecg) {
-          setLiveECGData(result.data.ecg);
-          setLiveHeartRate(result.data.heartRate);
+        if (result.status === 'ok' && result.recentReadings && result.recentReadings.length > 0) {
+          const latestReading = result.recentReadings[result.recentReadings.length - 1];
+          
+          const ecgData = {
+            p: latestReading.p,
+            q: latestReading.q,
+            r: latestReading.r,
+            s: latestReading.s,
+            t: latestReading.t
+          };
+          
+          const heartRateData = {
+            bpm: latestReading.bpm
+          };
+
+          setLiveECGData(ecgData);
+          setLiveHeartRate(heartRateData);
           setIsConnected(true);
           setConnectionError(null);
           errorCountRef.current = 0;
 
-          // If recording, save the data
+          // Update graph data points (always, not just when recording)
+          setEcgDataPoints(prev => {
+            const newPoints = [...prev, latestReading.r]; // Use R wave for visualization
+            return newPoints.slice(-MAX_DATA_POINTS); // Keep last MAX_DATA_POINTS
+          });
+
+          // If recording, also save the data point
           if (isRecording) {
-            setRecordedData(prev => [...prev, {
-              ecg: result.data.ecg,
-              bpm: result.data.heartRate.bpm,
+            const dataPoint = {
+              ecg: ecgData,
+              bpm: latestReading.bpm,
               timestamp: Date.now()
-            }]);
+            };
+            
+            setRecordedData(prev => [...prev, dataPoint]);
           }
         } else {
-          // Data is stale or no data available
-          setIsConnected(false);
-          if (!result.connected) {
-            setConnectionError('ESP32 connection lost (no recent data)');
+          // No data available yet
+          if (errorCountRef.current < 3) {
+            setIsConnected(false);
+            setConnectionError('Waiting for ESP32 data...');
           }
         }
       } catch (error) {
         errorCountRef.current++;
         console.error('Error fetching ECG data:', error.message);
-        setIsConnected(false);
         
-        if (error.name === 'AbortError') {
-          setConnectionError('Connection timeout - check server');
-        } else {
-          setConnectionError(`Connection error: ${error.message}`);
-        }
+        if (errorCountRef.current > 5) {
+          setIsConnected(false);
+          
+          if (error.name === 'AbortError') {
+            setConnectionError('Connection timeout - check ESP32');
+          } else {
+            setConnectionError(`Connection error: ${error.message}`);
+          }
 
-        // Clear data if too many errors
-        if (errorCountRef.current > 3) {
-          setLiveECGData(null);
-          setLiveHeartRate(null);
+          // Clear data if too many consecutive errors
+          if (errorCountRef.current > 10) {
+            setLiveECGData(null);
+            setLiveHeartRate(null);
+          }
         }
       }
     };
 
-    // Poll every 800ms (slightly faster for better real-time feel)
-    pollingRef.current = setInterval(pollData, 800);
+    // ✅ Poll every 600ms - balanced for 500ms Arduino send rate + network latency
+    pollingRef.current = setInterval(pollData, 600);
     pollData(); // Initial fetch
 
     return () => {
@@ -112,63 +149,53 @@ export default function TakeReadingPage() {
   // Generate ECG waveform for visualization from real data
   const generateECGData = () => {
     const data = [];
+    const canvasWidth = 800; // Match canvas width
+    const canvasHeight = 300;
+    const baseY = canvasHeight / 2; // Center baseline at 150px
+    const totalPoints = 500; // Total points to show across canvas width
     
-    if (!liveECGData) {
-      // No data yet, show flat line
-      for (let i = 0; i < 500; i++) {
-        data.push({ x: i, y: 150 });
+    if (ecgDataPoints.length === 0) {
+      // No data yet, show flat line at center
+      for (let i = 0; i < totalPoints; i++) {
+        data.push({ x: i, y: baseY });
       }
       return data;
     }
 
-    // Create realistic ECG visualization from P, Q, R, S, T waves
-    const { p, q, r, s, t } = liveECGData;
-    const baseY = 150;
-    const scale = 50; // Scale factor for wave amplitudes
-
-    for (let i = 0; i < 500; i++) {
-      const x = i;
-      const phase = (i % 100) / 100; // One heartbeat cycle per 100 points
-      let y = baseY;
-
-      if (phase < 0.15) {
-        // P wave (atrial depolarization)
-        const pPhase = phase / 0.15;
-        y = baseY - (p * scale * Math.sin(pPhase * Math.PI));
-      } else if (phase < 0.25) {
-        // PR segment
-        y = baseY;
-      } else if (phase < 0.30) {
-        // Q wave
-        const qPhase = (phase - 0.25) / 0.05;
-        y = baseY - (q * scale * Math.sin(qPhase * Math.PI));
-      } else if (phase < 0.35) {
-        // R wave (ventricular depolarization - largest peak)
-        const rPhase = (phase - 0.30) / 0.05;
-        y = baseY - (r * scale * Math.sin(rPhase * Math.PI));
-      } else if (phase < 0.40) {
-        // S wave
-        const sPhase = (phase - 0.35) / 0.05;
-        y = baseY - (s * scale * Math.sin(sPhase * Math.PI));
-      } else if (phase < 0.50) {
-        // ST segment
-        y = baseY;
-      } else if (phase < 0.70) {
-        // T wave (ventricular repolarization)
-        const tPhase = (phase - 0.50) / 0.20;
-        y = baseY - (t * scale * Math.sin(tPhase * Math.PI));
-      } else {
-        // Rest of cycle
-        y = baseY;
-      }
-
-      data.push({ x, y });
+    // Always take the last 500 points for smooth scrolling effect
+    const pointsToShow = ecgDataPoints.slice(-totalPoints);
+    
+    // Fill the entire canvas width with available data
+    // If less than 500 points, pad with baseline on the left
+    const paddingNeeded = Math.max(0, totalPoints - pointsToShow.length);
+    
+    // Add padding (flat line) on the left side
+    for (let i = 0; i < paddingNeeded; i++) {
+      data.push({ x: i, y: baseY });
+    }
+    
+    // Add actual ECG data
+    for (let i = 0; i < pointsToShow.length; i++) {
+      const value = pointsToShow[i] || 0;
+      
+      // Scale R-wave values (typically 0-700 range) to fit canvas nicely
+      // R-wave should point UP from baseline (medical standard)
+      const scale = 0.18; // Slightly reduced for better fit
+      const y = baseY - (value * scale); // Subtract to go UP from baseline
+      
+      // Clamp to canvas bounds with padding to prevent cutoff
+      const clampedY = Math.max(20, Math.min(canvasHeight - 20, y));
+      
+      data.push({ 
+        x: paddingNeeded + i, 
+        y: clampedY 
+      });
     }
     
     return data;
   };
 
-  // Enhanced ECG drawing with glow effects
+  // Enhanced ECG drawing with glow effects and scrolling indicator
   const drawECG = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -179,84 +206,159 @@ export default function TakeReadingPage() {
     // Clear canvas
     ctx.clearRect(0, 0, width, height);
     
-    // Enhanced grid with glow
-    ctx.strokeStyle = isRecording ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.1)';
+    // Draw background grid
+    ctx.strokeStyle = isRecording ? 'rgba(34, 197, 94, 0.2)' : 'rgba(59, 130, 246, 0.15)';
     ctx.lineWidth = 0.5;
     
-    // Draw grid
-    for (let x = 0; x < width; x += 20) {
+    // Major grid lines (every 40px) - like ECG paper
+    for (let x = 0; x < width; x += 40) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, height);
       ctx.stroke();
     }
     
-    for (let y = 0; y < height; y += 20) {
+    for (let y = 0; y < height; y += 40) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(width, y);
       ctx.stroke();
     }
     
+    // Minor grid lines (every 8px) - finer grid
+    ctx.strokeStyle = isRecording ? 'rgba(34, 197, 94, 0.08)' : 'rgba(59, 130, 246, 0.06)';
+    ctx.lineWidth = 0.3;
+    
+    for (let x = 8; x < width; x += 8) {
+      if (x % 40 !== 0) { // Skip major grid lines
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+      }
+    }
+    
+    for (let y = 8; y < height; y += 8) {
+      if (y % 40 !== 0) { // Skip major grid lines
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+      }
+    }
+    
+    // Draw baseline reference line at center
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(0, height / 2);
+    ctx.lineTo(width, height / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
     // Draw ECG waveform with glow effect
     const data = generateECGData();
     
-    // Glow effect
-    ctx.shadowColor = isRecording ? '#22c55e' : '#3b82f6';
-    ctx.shadowBlur = isRecording ? 10 : 5;
-    ctx.strokeStyle = isRecording ? '#22c55e' : '#3b82f6';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    
-    data.forEach((point, index) => {
-      const x = (point.x / 500) * width;
-      const y = point.y;
+    if (data.length > 0) {
+      // First pass - strong glow
+      ctx.shadowColor = isRecording ? '#22c55e' : '#3b82f6';
+      ctx.shadowBlur = 20;
+      ctx.strokeStyle = isRecording ? 'rgba(34, 197, 94, 0.8)' : 'rgba(59, 130, 246, 0.8)';
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
       
-      if (index === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
+      data.forEach((point, index) => {
+        const x = (point.x / 500) * width;
+        const y = point.y;
+        
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      
+      ctx.stroke();
+      
+      // Second pass - brighter core line
+      ctx.shadowBlur = 8;
+      ctx.strokeStyle = isRecording ? '#22c55e' : '#3b82f6';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      
+      data.forEach((point, index) => {
+        const x = (point.x / 500) * width;
+        const y = point.y;
+        
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      
+      ctx.stroke();
+      
+      // Draw scrolling "sweep line" indicator when recording
+      if (isRecording && ecgDataPoints.length > 0) {
+        const sweepX = ((ecgDataPoints.length % 500) / 500) * width;
+        
+        // Vertical sweep line
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = isRecording ? '#22c55e' : '#3b82f6';
+        ctx.strokeStyle = isRecording ? 'rgba(34, 197, 94, 0.6)' : 'rgba(59, 130, 246, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(sweepX, 0);
+        ctx.lineTo(sweepX, height);
+        ctx.stroke();
       }
-    });
-    
-    ctx.stroke();
+    }
     
     // Reset shadow
     ctx.shadowBlur = 0;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRecording, liveECGData]); // Dependencies for useCallback
+  }, [isRecording, ecgDataPoints]); // Dependencies for useCallback
 
-  // Recording timer and animation
+  // Recording timer and animation with auto-stop at 60 seconds
   useEffect(() => {
     let interval;
     
     const animate = () => {
       drawECG();
-      if (isRecording) {
-        animationRef.current = requestAnimationFrame(animate);
-      }
+      animationRef.current = requestAnimationFrame(animate);
     };
+    
+    // Start animation immediately (not just when recording)
+    animate();
     
     if (isRecording) {
       interval = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
+        setRecordingTime(prev => {
+          const newTime = prev + 1;
+          
+          // Auto-stop at 60 seconds
+          if (newTime >= MAX_RECORDING_TIME) {
+            stopRecording();
+            return MAX_RECORDING_TIME;
+          }
+          
+          return newTime;
+        });
       }, 1000);
-      animate();
-    } else {
-      clearInterval(interval);
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
     }
     
     return () => {
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRecording]); // drawECG is stable with useCallback
+  }, [isRecording, ecgDataPoints]); // ✅ Added ecgDataPoints as dependency
 
   const startRecording = () => {
     setIsRecording(true);
@@ -264,6 +366,7 @@ export default function TakeReadingPage() {
     setCurrentReading(null);
     setShowResults(false);
     setRecordedData([]); // Clear previous recording
+    setEcgDataPoints([]); // Clear graph data
   };
 
   const stopRecording = () => {
@@ -290,6 +393,7 @@ export default function TakeReadingPage() {
           timestamp: new Date().toISOString(),
           duration: recordingTime,
           heartRate: 0,
+          recordedData: [],
         });
       } else {
         // Analyze recorded data
@@ -354,12 +458,59 @@ export default function TakeReadingPage() {
             t: avgT.toFixed(2),
           },
           samples: recordedData.length,
+          recordedData: recordedData, // Store all recorded data points
+          maxBPM,
+          minBPM,
         });
       }
       
       setIsAnalyzing(false);
       setShowResults(true);
     }, 3000);
+  };
+
+  // Save reading to Supabase
+  const saveReading = async () => {
+    if (!user) {
+      alert('Please log in to save readings');
+      return;
+    }
+
+    if (!currentReading || !currentReading.recordedData || currentReading.recordedData.length === 0) {
+      alert('No data to save');
+      return;
+    }
+
+    setIsSaving(true);
+    
+    try {
+      const { data, error } = await supabase
+        .from('ecg_readings')
+        .insert({
+          user_id: user.id,
+          reading_data: currentReading.recordedData, // Save as JSONB array
+          status: currentReading.status,
+          risk_level: currentReading.risk,
+          confidence: currentReading.confidence,
+          avg_heart_rate: currentReading.heartRate,
+          max_heart_rate: currentReading.maxBPM,
+          min_heart_rate: currentReading.minBPM,
+          duration: currentReading.duration,
+          samples_count: currentReading.samples,
+          avg_wave_data: currentReading.waveData,
+          recorded_at: currentReading.timestamp,
+        });
+
+      if (error) throw error;
+
+      alert('✅ Reading saved successfully!');
+      console.log('Reading saved:', data);
+    } catch (error) {
+      console.error('Error saving reading:', error);
+      alert('❌ Failed to save reading: ' + error.message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const formatTime = (seconds) => {
@@ -635,8 +786,21 @@ export default function TakeReadingPage() {
                       </div>
                     )}
 
-                    <button className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold py-4 rounded-xl hover:from-blue-600 hover:to-purple-600 transition-all duration-300 transform hover:scale-105">
-                      Save to History
+                    <button className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold py-4 rounded-xl hover:from-blue-600 hover:to-purple-600 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                      onClick={saveReading}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-5 w-5" />
+                          <span>Save to History</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -667,27 +831,32 @@ export default function TakeReadingPage() {
               </div>
               
               <div className="space-y-4">
-                <div className="relative overflow-hidden bg-gradient-to-r from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 rounded-xl p-4 border border-red-100 dark:border-red-800/50">
-                  <div className="flex items-center justify-between">
+                <div className="relative overflow-hidden bg-gradient-to-r from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 rounded-xl p-6 border-2 border-red-100 dark:border-red-800/50">
+                  <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-3">
                       <div className="relative">
-                        <Heart className={`h-6 w-6 text-red-500 ${isRecording ? 'heart-beat' : ''}`} />
+                        <Heart className={`h-8 w-8 text-red-500 ${isRecording ? 'heart-beat' : ''}`} />
                         
                       </div>
                       <div>
-                        <span className="font-semibold text-gray-900 dark:text-white">Heart Rate</span>
+                        <span className="font-semibold text-gray-900 dark:text-white text-lg">Heart Rate</span>
                         <p className="text-xs text-gray-500">Beats per minute</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-2xl font-bold text-red-600 dark:text-red-400">
-                        {liveHeartRate ? liveHeartRate.bpm : '--'}
-                      </span>
-                      <span className="text-sm text-red-500 ml-1">BPM</span>
+                  </div>
+                  <div className="text-center mt-4">
+                    <div className="text-6xl font-bold text-red-600 dark:text-red-400 tabular-nums">
+                      {liveHeartRate ? liveHeartRate.bpm : '--'}
                     </div>
+                    <span className="text-2xl text-red-500 ml-2 font-semibold">BPM</span>
+                    {isRecording && (
+                      <div className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+                        Recording: {formatTime(recordingTime)} / {formatTime(MAX_RECORDING_TIME)}
+                      </div>
+                    )}
                   </div>
                   {isConnected && (
-                    <div className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-red-500 to-pink-500 animate-pulse" style={{width: '75%'}}></div>
+                    <div className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-red-500 to-pink-500 animate-pulse" style={{width: '100%'}}></div>
                   )}
                 </div>
 
