@@ -1,94 +1,74 @@
 import { NextResponse } from 'next/server';
+import { addReading, getRecentReadings } from '@/lib/ecgStore';
 
-// Store latest data in memory for polling
-let latestData = {
-  ecg: null,
-  heartRate: null,
-  timestamp: null
-};
-
-// Data expiry time (5 seconds - if no new data, consider connection lost)
-const DATA_EXPIRY_MS = 5000;
-
+// This endpoint receives ECG data from ESP32
 export async function POST(request) {
   try {
     const data = await request.json();
     
-    // Validate required fields
-    if (typeof data.p !== 'number' || 
-        typeof data.q !== 'number' || 
-        typeof data.r !== 'number' || 
-        typeof data.s !== 'number' || 
-        typeof data.t !== 'number' || 
-        typeof data.bpm !== 'number') {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Invalid data format. Required: p, q, r, s, t (numbers), bpm (number)' 
-      }, { status: 400 });
-    }
-
-    // Validate data ranges
-    if (data.bpm < 30 || data.bpm > 250) {
-      console.warn('⚠️ BPM out of normal range:', data.bpm);
-    }
-    
-    console.log('📊 ECG Data received:', {
-      waves: { 
-        p: data.p.toFixed(3), 
-        q: data.q.toFixed(3), 
-        r: data.r.toFixed(3), 
-        s: data.s.toFixed(3), 
-        t: data.t.toFixed(3) 
-      },
-      bpm: data.bpm,
-      source: data.type || 'unknown',
-      timestamp: new Date().toISOString()
-    });
-    
-    // Store latest data with timestamp
-    const now = Date.now();
-    latestData = {
-      ecg: {
-        p: parseFloat(data.p.toFixed(3)),
-        q: parseFloat(data.q.toFixed(3)),
-        r: parseFloat(data.r.toFixed(3)),
-        s: parseFloat(data.s.toFixed(3)),
-        t: parseFloat(data.t.toFixed(3))
-      },
-      heartRate: {
-        bpm: Math.round(data.bpm)
-      },
-      timestamp: now
+    // Create reading object
+    const reading = {
+      p: data.p,
+      q: data.q,
+      r: data.r,
+      s: data.s,
+      t: data.t,
+      bpm: data.bpm
     };
     
-    return NextResponse.json({ 
-      success: true, 
-      message: 'ECG data received and stored',
-      timestamp: now
-    });
+    // Store in memory
+    addReading(reading);
     
+    // Log the received ECG data in real-time
+    console.log('📊 ECG Data Received:', {
+      timestamp: new Date().toISOString(),
+      P: reading.p,
+      Q: reading.q,
+      R: reading.r,
+      S: reading.s,
+      T: reading.t,
+      BPM: reading.bpm
+    });
+
+    // You can add data validation here
+    if (typeof reading.bpm !== 'number' || reading.bpm < 0 || reading.bpm > 300) {
+      console.warn('⚠️ Unusual BPM value:', reading.bpm);
+    }
+
+    // Return success response
+    return NextResponse.json({ 
+      status: 'success',
+      message: 'ECG data received',
+      timestamp: new Date().toISOString()
+    }, { status: 200 });
+
   } catch (error) {
     console.error('❌ Error processing ECG data:', error);
     return NextResponse.json({ 
-      success: false, 
+      status: 'error',
+      message: 'Failed to process ECG data',
       error: error.message 
     }, { status: 500 });
   }
 }
 
-// GET endpoint for frontend to poll data
+// Handle GET requests to retrieve recent readings
 export async function GET() {
-  const now = Date.now();
-  const isDataFresh = latestData.timestamp && (now - latestData.timestamp) < DATA_EXPIRY_MS;
-  
-  return NextResponse.json({
-    success: true,
-    data: isDataFresh ? latestData : {
-      ecg: null,
-      heartRate: null,
-      timestamp: null
-    },
-    connected: isDataFresh,
-    lastUpdate: latestData.timestamp ? new Date(latestData.timestamp).toISOString() : null
-  });
+  try {
+    const readings = getRecentReadings();
+    return NextResponse.json({ 
+      status: 'ok',
+      message: 'ECG data endpoint is running',
+      timestamp: new Date().toISOString(),
+      readingsCount: readings.length,
+      recentReadings: readings
+    });
+  } catch (error) {
+    console.error('❌ Error fetching readings:', error);
+    return NextResponse.json({ 
+      status: 'error',
+      message: 'Failed to fetch readings',
+      error: error.message 
+    }, { status: 500 });
+  }
 }
