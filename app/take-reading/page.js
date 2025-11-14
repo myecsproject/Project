@@ -17,6 +17,7 @@ import {
   Users,
   Star
 } from 'lucide-react';
+import { ECGMedicalPaper } from '@/components/ecg-medical-paper';
 
 export default function TakeReadingPage() {
   const [isRecording, setIsRecording] = useState(false);
@@ -28,50 +29,9 @@ export default function TakeReadingPage() {
   const [allRecordedData, setAllRecordedData] = useState([]);
   const [latestHeartRate, setLatestHeartRate] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
-  const canvasRef = useRef(null);
-  const animationRef = useRef(null);
+  const [sensorData, setSensorData] = useState([]);
   const analyzeRef = useRef(null);
-  const dataFetchRef = useRef(null);
   const recordingStartTime = useRef(null);
-
-  // Fetch real ECG data from API
-  const fetchECGData = async () => {
-    try {
-      const response = await fetch('/api/sensor');
-      if (!response.ok) {
-        setConnectionStatus('error');
-        return;
-      }
-      
-      const readings = await response.json();
-      
-      if (readings && Array.isArray(readings) && readings.length > 0) {
-        // Get the most recent reading (first item is newest)
-        const latestReading = readings[0];
-        
-        if (latestReading && latestReading.data && Array.isArray(latestReading.data)) {
-          setRealECGData(latestReading.data);
-          setConnectionStatus('connected');
-          
-          // Calculate heart rate from the data
-          const heartRate = calculateHeartRate(latestReading.data);
-          setLatestHeartRate(heartRate);
-          
-          // Store data if recording
-          if (isRecording) {
-            setAllRecordedData(prev => [...prev, ...latestReading.data]);
-          }
-        } else {
-          setConnectionStatus('no_data');
-        }
-      } else {
-        setConnectionStatus('no_data');
-      }
-    } catch (error) {
-      console.error('Error fetching ECG data:', error);
-      setConnectionStatus('error');
-    }
-  };
 
   // Simple heart rate calculation from ECG data
   const calculateHeartRate = useCallback((data) => {
@@ -100,172 +60,32 @@ export default function TakeReadingPage() {
     return Math.round(60 / secondsPerBeat);
   }, []);
 
-  // Convert real ECG data to canvas coordinates
-  const convertECGToCanvas = useCallback((data, width, height) => {
-    if (!data || data.length === 0) return [];
-    
-    const points = [];
-    const maxValue = Math.max(...data);
-    const minValue = Math.min(...data);
-    const range = maxValue - minValue || 1;
-    
-    // Use padding for better visibility
-    const padding = 40;
-    const usableHeight = height - (padding * 2);
-    
-    data.forEach((value, index) => {
-      const x = (index / data.length) * width;
-      // Normalize to 0-1 range, then scale to canvas height
-      // Invert Y axis (canvas Y increases downward)
-      const normalizedValue = (value - minValue) / range;
-      const y = height - padding - (normalizedValue * usableHeight);
-      points.push({ x, y });
-    });
-    
-    return points;
-  }, []);
-
-  // Dummy ECG data generator with improved algorithm (fallback)
-  const generateECGData = () => {
-    const data = [];
-    const time = Date.now() / 1000;
-    for (let i = 0; i < 500; i++) {
-      const x = i;
-      // Create ECG-like waveform with P, QRS, T waves
-      let y = 0;
-      
-      // Heart rate simulation (60-100 BPM)
-      const heartRate = 75; // BPM
-      const cycleLength = 60 / heartRate * 100; // samples per cycle
-      const position = (x + time * 50) % cycleLength;
-      
-      // P wave
-      if (position < 10) {
-        y += Math.sin((position / 10) * Math.PI) * 0.2;
-      }
-      // QRS complex
-      else if (position > 20 && position < 35) {
-        const qrsPos = (position - 20) / 15;
-        if (qrsPos < 0.3) {
-          y -= qrsPos * 0.5; // Q wave
-        } else if (qrsPos < 0.7) {
-          y += (qrsPos - 0.3) * 3; // R wave
-        } else {
-          y -= (qrsPos - 0.7) * 1.5; // S wave
-        }
-      }
-      // T wave
-      else if (position > 50 && position < 80) {
-        y += Math.sin(((position - 50) / 30) * Math.PI) * 0.4;
-      }
-      
-      // Add some noise
-      y += (Math.random() - 0.5) * 0.05;
-      
-      data.push({ x: i, y: 150 + y * 50 });
-    }
-    return data;
-  };
-
-  // Enhanced ECG drawing with real data
-  const drawECG = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    const { width, height } = canvas;
-    
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
-    
-    // Enhanced grid with glow
-    ctx.strokeStyle = isRecording ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.1)';
-    ctx.lineWidth = 0.5;
-    
-    // Draw grid
-    for (let x = 0; x < width; x += 20) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-    }
-    
-    for (let y = 0; y < height; y += 20) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-    }
-    
-    // Choose data source: real ECG data if available, otherwise simulated
-    let data;
-    if (realECGData.length > 0 && connectionStatus === 'connected') {
-      data = convertECGToCanvas(realECGData, width, height);
-    } else {
-      data = generateECGData();
-    }
-    
-    // Draw ECG waveform with glow effect
-    if (data.length > 0) {
-      // Draw glow layer first
-      ctx.shadowColor = isRecording ? '#22c55e' : '#3b82f6';
-      ctx.shadowBlur = isRecording ? 15 : 8;
-      ctx.strokeStyle = connectionStatus === 'connected' ? 
-        (isRecording ? '#22c55e' : '#3b82f6') : '#ef4444';
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      
-      ctx.beginPath();
-      data.forEach((point, index) => {
-        if (index === 0) {
-          ctx.moveTo(point.x, point.y);
-        } else {
-          ctx.lineTo(point.x, point.y);
-        }
-      });
-      ctx.stroke();
-      
-      // Draw main line (brighter, no shadow)
-      ctx.shadowBlur = 0;
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = connectionStatus === 'connected' ? 
-        (isRecording ? '#4ade80' : '#60a5fa') : '#f87171';
-      
-      ctx.beginPath();
-      data.forEach((point, index) => {
-        if (index === 0) {
-          ctx.moveTo(point.x, point.y);
-        } else {
-          ctx.lineTo(point.x, point.y);
-        }
-      });
-      ctx.stroke();
-    }
-    
-    // Draw connection status indicator
-    if (connectionStatus !== 'connected') {
-      ctx.font = '16px Inter, sans-serif';
-      ctx.fillStyle = '#ef4444';
-      ctx.textAlign = 'center';
-      ctx.fillText(
-        connectionStatus === 'no_data' ? 'No ECG Data Available' : 'Connection Error',
-        width / 2,
-        height / 2
-      );
-    }
-  }, [isRecording, realECGData, connectionStatus, convertECGToCanvas]);
-
 
 
   // Data fetching effect
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('/api/sensor?limit=1&includeRaw=true');
+        // First, try to load from sensor-data.json
+        const jsonResponse = await fetch('/sensor-data.json');
+        if (jsonResponse.ok) {
+          const jsonData = await jsonResponse.json();
+          setSensorData(jsonData);
+          setConnectionStatus('connected');
+          
+          if (jsonData.length > 0 && jsonData[0].data) {
+            setRealECGData(jsonData[0].data);
+            const heartRate = calculateHeartRate(jsonData[0].data);
+            setLatestHeartRate(heartRate);
+          }
+        }
+        
+        // Then try API
+        const response = await fetch('/api/sensor?limit=10&includeRaw=true');
         const result = await response.json();
         
         if (result.success && result.data.length > 0) {
+          setSensorData(result.data);
           const latestReading = result.data[0];
           if (latestReading.data && Array.isArray(latestReading.data)) {
             setRealECGData(latestReading.data);
@@ -341,29 +161,14 @@ export default function TakeReadingPage() {
           return newTime;
         });
       }, 1000);
-      
-      // Start animation
-      const animateLoop = () => {
-        drawECG();
-        if (isRecording) {
-          animationRef.current = requestAnimationFrame(animateLoop);
-        }
-      };
-      animateLoop();
     } else {
       clearInterval(interval);
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
     }
     
     return () => {
       clearInterval(interval);
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
     };
-  }, [isRecording, drawECG, latestHeartRate, allRecordedData.length, connectionStatus]);
+  }, [isRecording, latestHeartRate, allRecordedData.length, connectionStatus]);
 
   const startRecording = () => {
     setIsRecording(true);
@@ -451,6 +256,7 @@ export default function TakeReadingPage() {
         <div className="grid xl:grid-cols-4 lg:grid-cols-3 gap-8">
           {/* Enhanced ECG Display */}
           <div className="xl:col-span-3 lg:col-span-2 space-y-8">
+            {/* Medical Paper Style ECG */}
             <div className="glass-effect rounded-3xl shadow-2xl p-8 border card-hover fade-in">
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center space-x-3">
@@ -462,7 +268,7 @@ export default function TakeReadingPage() {
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                      ECG Waveform
+                      ECG Waveform (Medical Paper Style)
                     </h2>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Real-time cardiac monitoring</p>
                   </div>
@@ -487,42 +293,23 @@ export default function TakeReadingPage() {
                 </div>
               </div>
               
-              {/* Enhanced Canvas Container */}
-              <div className="relative bg-gray-900 dark:bg-black rounded-2xl p-6 mb-8 overflow-hidden">
-                {/* Grid overlay effect */}
-                <div className="absolute inset-0 opacity-20">
-                  <div className="absolute inset-0" style={{
-                    backgroundImage: `
-                      linear-gradient(rgba(59, 130, 246, 0.3) 1px, transparent 1px),
-                      linear-gradient(90deg, rgba(59, 130, 246, 0.3) 1px, transparent 1px)
-                    `,
-                    backgroundSize: '20px 20px'
-                  }}></div>
-                </div>
-                
-                <canvas
-                  ref={canvasRef}
-                  width={800}
-                  height={300}
-                  className="w-full h-auto relative z-10"
+              {/* Medical Paper ECG Graph */}
+              {sensorData.length > 0 ? (
+                <ECGMedicalPaper 
+                  sampleData={sensorData} 
+                  sampleRate={sensorData[0]?.sampleRate || 1000}
                 />
-                
-                {/* Signal quality indicator */}
-                <div className="absolute top-4 right-4 flex items-center space-x-2">
-                  {connectionStatus === 'connected' ? (
-                    <Wifi className="h-5 w-5 text-green-500 animate-pulse" />
-                  ) : (
-                    <WifiOff className="h-5 w-5 text-gray-400" />
-                  )}
-                  <span className="text-xs font-medium text-white/80">
-                    {connectionStatus === 'connected' ? 'Live Data' : 
-                     connectionStatus === 'no_data' ? 'No Data' : 'No Signal'}
-                  </span>
+              ) : (
+                <div className="relative bg-gray-100 dark:bg-gray-800 rounded-2xl p-6 mb-8 flex items-center justify-center" style={{minHeight: '400px'}}>
+                  <div className="text-center">
+                    <WifiOff className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500 dark:text-gray-400">Loading ECG Data...</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Enhanced Controls */}
-              <div className="flex justify-center">
+              <div className="flex justify-center mt-8">
                 {!isRecording ? (
                   <button
                     onClick={startRecording}
