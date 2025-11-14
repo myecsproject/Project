@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
+import { Download } from 'lucide-react';
 
 export function ECGMedicalPaper({ sampleData, sampleRate = 1000 }) {
   const canvasRef = useRef(null);
@@ -179,7 +180,7 @@ export function ECGMedicalPaper({ sampleData, sampleRate = 1000 }) {
     // --- Labels ---
     ctx.fillStyle = 'black';
     ctx.font = 'bold 16px Arial';
-    ctx.fillText('ECG Lead (Medical Paper Style)', 20, 25);
+    ctx.fillText('ECG Lead', 20, 25);
     
     ctx.font = '12px Arial';
     ctx.fillText(`Time: 0 - ${maxTime.toFixed(2)} sec`, 20, height - 15);
@@ -187,8 +188,30 @@ export function ECGMedicalPaper({ sampleData, sampleRate = 1000 }) {
 
   }, [ecgData, sampleRate]);
 
+  const downloadGraph = () => {
+    if (!canvasRef.current) return;
+    
+    // Create download link
+    const link = document.createElement('a');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    link.download = `ECG_Graph_${timestamp}.png`;
+    link.href = canvasRef.current.toDataURL('image/png');
+    link.click();
+  };
+
   return (
     <div className="w-full bg-white rounded-lg shadow-lg p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-gray-700">ECG </h3>
+        <button
+          onClick={downloadGraph}
+          disabled={ecgData.length === 0}
+          className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
+        >
+          <Download className="h-4 w-4" />
+          <span>Download Graph</span>
+        </button>
+      </div>
       {ecgData.length === 0 && (
         <div className="text-center text-gray-500 py-8">
           <p>Loading ECG data... ({sampleData?.length || 0} entries received)</p>
