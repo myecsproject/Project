@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import { join } from 'path';
+import { spawn } from "child_process";
+import path from "path";
 
 // Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic';
@@ -72,6 +74,8 @@ export async function POST(request) {
         range: Math.max(...ecgData.data) - Math.min(...ecgData.data)
       }
     };
+
+    
 
     // Log to console in real-time with ECG-specific formatting
     console.log('❤️  REAL-TIME ECG DATA RECEIVED:');
@@ -192,3 +196,5 @@ export async function DELETE() {
     }, { status: 500 });
   }
 }
+
+
