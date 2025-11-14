@@ -14,6 +14,20 @@ const DATA_FILE_PATH = join(process.cwd(), 'sensor-data.json');
 async function ensureDataFile() {
   try {
     await fs.access(DATA_FILE_PATH);
+    // Validate the file content
+    const content = await fs.readFile(DATA_FILE_PATH, 'utf-8');
+    if (!content || content.trim() === '') {
+      console.log('📁 File is empty, initializing with []');
+      await fs.writeFile(DATA_FILE_PATH, '[]');
+    } else {
+      // Try to parse to validate JSON
+      try {
+        JSON.parse(content);
+      } catch (parseError) {
+        console.log('⚠️ Corrupted JSON file detected, resetting to []');
+        await fs.writeFile(DATA_FILE_PATH, '[]');
+      }
+    }
   } catch (error) {
     // File doesn't exist, create it with an empty array (compact format)
     await fs.writeFile(DATA_FILE_PATH, '[]');
@@ -25,9 +39,21 @@ async function ensureDataFile() {
 async function readSensorData() {
   try {
     const fileContent = await fs.readFile(DATA_FILE_PATH, 'utf-8');
-    return JSON.parse(fileContent);
+    if (!fileContent || fileContent.trim() === '') {
+      console.log('⚠️ Empty file, returning empty array');
+      return [];
+    }
+    const parsed = JSON.parse(fileContent);
+    return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
-    console.error('Error reading sensor data:', error);
+    console.error('Error reading sensor data:', error.message);
+    // Reset the file if it's corrupted
+    try {
+      await fs.writeFile(DATA_FILE_PATH, '[]');
+      console.log('🔄 Reset corrupted file to []');
+    } catch (writeError) {
+      console.error('Error resetting file:', writeError.message);
+    }
     return [];
   }
 }
