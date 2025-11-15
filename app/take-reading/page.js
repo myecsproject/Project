@@ -15,7 +15,8 @@ import {
   TrendingUp,
   Shield,
   Users,
-  Star
+  Star,
+  Trash2
 } from 'lucide-react';
 import { ECGMedicalPaper } from '@/components/ecg-medical-paper';
 
@@ -30,6 +31,7 @@ export default function TakeReadingPage() {
   const [latestHeartRate, setLatestHeartRate] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [sensorData, setSensorData] = useState([]);
+  const [isClearing, setIsClearing] = useState(false);
   const analyzeRef = useRef(null);
   const recordingStartTime = useRef(null);
 
@@ -138,20 +140,71 @@ export default function TakeReadingPage() {
             
             // Trigger analysis
             setTimeout(async () => {
+              console.log('🔬 AUTO-STOP: Starting AI analysis...');
+              
               // Get ECG data for prediction (need exactly 200 samples)
               let ecgDataForPrediction = allRecordedData.length > 0 ? allRecordedData : realECGData;
+              
+              console.log('📊 ECG Data for prediction:', {
+                recordedDataLength: allRecordedData.length,
+                realDataLength: realECGData.length,
+                usingRecorded: allRecordedData.length > 0,
+                selectedDataLength: ecgDataForPrediction.length
+              });
+              
+              // Check for invalid/saturated ECG data (mostly 4095 and 0 values)
+              const check4095Pattern = (data) => {
+                const count4095 = data.filter(v => v === 4095).length;
+                const count0 = data.filter(v => v === 0).length;
+                const invalidCount = count4095 + count0;
+                const invalidPercentage = (invalidCount / data.length) * 100;
+                
+                console.log('🔍 ECG Data Quality Check:', {
+                  total: data.length,
+                  count4095: count4095,
+                  count0: count0,
+                  invalidPercentage: invalidPercentage.toFixed(2) + '%'
+                });
+                
+                // If more than 50% of values are 4095 or 0, data is invalid
+                return invalidPercentage > 50;
+              };
+              
+              // Check if data is invalid before processing
+              if (check4095Pattern(ecgDataForPrediction)) {
+                console.warn('⚠️ Invalid ECG data detected: Too many saturated values (4095/0)');
+                
+                setCurrentReading({
+                  status: 'Unhealthy - Invalid Signal',
+                  isHealthy: false,
+                  prediction: 1,
+                  dataQualityIssue: true,
+                  timestamp: new Date().toISOString(),
+                  duration: 30,
+                  heartRate: null,
+                  totalSamples: allRecordedData.length,
+                  avgSignalQuality: 0
+                });
+                setIsAnalyzing(false);
+                setShowResults(true);
+                return;
+              }
               
               // If we have more than 200 samples, take the first 200
               if (ecgDataForPrediction.length > 200) {
                 ecgDataForPrediction = ecgDataForPrediction.slice(0, 200);
+                console.log('✂️ Trimmed data to 200 samples');
               } 
               // If we have less than 200 samples, pad with zeros
               else if (ecgDataForPrediction.length < 200) {
                 const padding = new Array(200 - ecgDataForPrediction.length).fill(0);
                 ecgDataForPrediction = [...ecgDataForPrediction, ...padding];
+                console.log(`➕ Padded data with ${padding.length} zeros to reach 200 samples`);
               }
               
               try {
+                console.log('📡 Calling AI prediction API...');
+                
                 // Call AI prediction API
                 const response = await fetch('/api/predict', {
                   method: 'POST',
@@ -159,17 +212,25 @@ export default function TakeReadingPage() {
                   body: JSON.stringify({ ecg: ecgDataForPrediction })
                 });
                 
+                console.log('📥 API Response status:', response.status);
                 const result = await response.json();
+                console.log('📥 API Response data:', result);
                 
-                if (result.error) {
-                  throw new Error(result.error);
+                if (!result.success || result.error) {
+                  throw new Error(result.error || 'AI prediction failed');
                 }
                 
                 // result.prediction is 0 (healthy) or 1 (unhealthy)
                 const isHealthy = result.prediction === 0;
                 
+                console.log('✅ AI Analysis complete:', {
+                  prediction: result.prediction,
+                  isHealthy: isHealthy,
+                  status: result.status
+                });
+                
                 setCurrentReading({
-                  status: isHealthy ? 'Healthy' : 'Unhealthy',
+                  status: result.status || (isHealthy ? 'Healthy' : 'Unhealthy'),
                   isHealthy: isHealthy,
                   prediction: result.prediction,
                   timestamp: new Date().toISOString(),
@@ -179,14 +240,18 @@ export default function TakeReadingPage() {
                   avgSignalQuality: connectionStatus === 'connected' ? 95 : 0
                 });
               } catch (error) {
-                console.error('AI Prediction error:', error);
+                console.error('❌ AI Prediction error:', {
+                  message: error.message,
+                  stack: error.stack
+                });
+                
                 setCurrentReading({
-                  status: 'Error',
+                  status: 'AI Analysis Failed',
                   isHealthy: null,
                   error: error.message,
                   timestamp: new Date().toISOString(),
                   duration: 30,
-                  heartRate: latestHeartRate || Math.floor(Math.random() * 40) + 60,
+                  heartRate: latestHeartRate || null,
                   totalSamples: allRecordedData.length,
                   avgSignalQuality: connectionStatus === 'connected' ? 95 : 0
                 });
@@ -216,10 +281,45 @@ export default function TakeReadingPage() {
     console.log('🫀 Starting ECG recording for 30 seconds...');
   };
 
+  const clearSensorData = async () => {
+    if (!confirm('Are you sure you want to clear all sensor data?')) {
+      return;
+    }
+    
+    setIsClearing(true);
+    console.log('🗑️ Clearing sensor data...');
+    
+    try {
+      const response = await fetch('/api/clear-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('✅ Sensor data cleared successfully');
+        setSensorData([]);
+        setRealECGData([]);
+        setAllRecordedData([]);
+        setCurrentReading(null);
+        setShowResults(false);
+        alert('Sensor data cleared successfully!');
+      } else {
+        throw new Error(result.error || 'Failed to clear data');
+      }
+    } catch (error) {
+      console.error('❌ Error clearing sensor data:', error);
+      alert('Error clearing sensor data: ' + error.message);
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   const stopRecording = async () => {
     setIsRecording(false);
     setIsAnalyzing(true);
-    console.log(`🫀 Recording stopped. Collected ${allRecordedData.length} data points.`);
+    console.log(`🫀 MANUAL STOP: Recording stopped. Collected ${allRecordedData.length} data points.`);
     
     // Scroll to analyzing section
     setTimeout(() => {
@@ -232,17 +332,66 @@ export default function TakeReadingPage() {
     // Get ECG data for prediction (need exactly 200 samples)
     let ecgDataForPrediction = allRecordedData.length > 0 ? allRecordedData : realECGData;
     
+    console.log('📊 ECG Data for prediction:', {
+      recordedDataLength: allRecordedData.length,
+      realDataLength: realECGData.length,
+      usingRecorded: allRecordedData.length > 0,
+      selectedDataLength: ecgDataForPrediction.length
+    });
+    
+    // Check for invalid/saturated ECG data (mostly 4095 and 0 values)
+    const check4095Pattern = (data) => {
+      const count4095 = data.filter(v => v === 4095).length;
+      const count0 = data.filter(v => v === 0).length;
+      const invalidCount = count4095 + count0;
+      const invalidPercentage = (invalidCount / data.length) * 100;
+      
+      console.log('🔍 ECG Data Quality Check:', {
+        total: data.length,
+        count4095: count4095,
+        count0: count0,
+        invalidPercentage: invalidPercentage.toFixed(2) + '%'
+      });
+      
+      // If more than 50% of values are 4095 or 0, data is invalid
+      return invalidPercentage > 50;
+    };
+    
+    // Check if data is invalid before processing
+    if (check4095Pattern(ecgDataForPrediction)) {
+      console.warn('⚠️ Invalid ECG data detected: Too many saturated values (4095/0)');
+      
+      setCurrentReading({
+        status: 'Unhealthy - Invalid Signal',
+        isHealthy: false,
+        prediction: 1,
+        dataQualityIssue: true,
+        timestamp: new Date().toISOString(),
+        duration: recordingTime,
+        heartRate: null,
+        totalSamples: allRecordedData.length,
+        avgSignalQuality: 0
+      });
+      setIsAnalyzing(false);
+      setShowResults(true);
+      return;
+    }
+    
     // If we have more than 200 samples, take the first 200
     if (ecgDataForPrediction.length > 200) {
       ecgDataForPrediction = ecgDataForPrediction.slice(0, 200);
+      console.log('✂️ Trimmed data to 200 samples');
     } 
     // If we have less than 200 samples, pad with zeros
     else if (ecgDataForPrediction.length < 200) {
       const padding = new Array(200 - ecgDataForPrediction.length).fill(0);
       ecgDataForPrediction = [...ecgDataForPrediction, ...padding];
+      console.log(`➕ Padded data with ${padding.length} zeros to reach 200 samples`);
     }
     
     try {
+      console.log('📡 Calling AI prediction API...');
+      
       // Call AI prediction API
       const response = await fetch('/api/predict', {
         method: 'POST',
@@ -250,36 +399,48 @@ export default function TakeReadingPage() {
         body: JSON.stringify({ ecg: ecgDataForPrediction })
       });
       
+      console.log('📥 API Response status:', response.status);
       const result = await response.json();
+      console.log('📥 API Response data:', result);
       
-      if (result.error) {
-        throw new Error(result.error);
+      if (!result.success || result.error) {
+        throw new Error(result.error || 'AI prediction failed');
       }
       
       // result.prediction is 0 (healthy) or 1 (unhealthy)
       const isHealthy = result.prediction === 0;
       
+      console.log('✅ AI Analysis complete:', {
+        prediction: result.prediction,
+        isHealthy: isHealthy,
+        status: result.status
+      });
+      
       setCurrentReading({
-        status: isHealthy ? 'Healthy' : 'Unhealthy',
+        status: result.status || (isHealthy ? 'Healthy' : 'Unhealthy'),
         isHealthy: isHealthy,
         prediction: result.prediction,
         timestamp: new Date().toISOString(),
         duration: recordingTime,
-        heartRate: latestHeartRate || Math.floor(Math.random() * 40) + 60,
+        heartRate: latestHeartRate || null,
         totalSamples: allRecordedData.length,
         avgSignalQuality: connectionStatus === 'connected' ? 95 : 0
       });
       setIsAnalyzing(false);
       setShowResults(true);
     } catch (error) {
-      console.error('AI Prediction error:', error);
+      console.error('❌ AI Prediction error:', {
+        message: error.message,
+        stack: error.stack
+      });
+      
       setCurrentReading({
-        status: 'Error',
+        status: 'AI Analysis Failed',
         isHealthy: null,
         error: error.message,
         timestamp: new Date().toISOString(),
         duration: recordingTime,
-        heartRate: latestHeartRate || Math.floor(Math.random() * 40) + 60,
+        heartRate: latestHeartRate || null,
         totalSamples: allRecordedData.length,
         avgSignalQuality: connectionStatus === 'connected' ? 95 : 0
       });
@@ -348,6 +509,16 @@ export default function TakeReadingPage() {
                 </div>
                 
                 <div className="flex items-center space-x-6">
+                  <button
+                    onClick={clearSensorData}
+                    disabled={isClearing || isRecording || sensorData.length === 0}
+                    className="inline-flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
+                    title="Clear all sensor data"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>{isClearing ? 'Clearing...' : 'Clear Data'}</span>
+                  </button>
+                  
                   <div className="flex items-center space-x-3">
                     <div className={`relative w-4 h-4 rounded-full ${isRecording ? 'bg-green-500' : 'bg-gray-400'} transition-all duration-300`}>
                       {isRecording && <div className="absolute inset-0 rounded-full bg-green-500 pulse-ring"></div>}
@@ -477,12 +648,34 @@ export default function TakeReadingPage() {
                   </h4>
                   
                   {currentReading.error && (
-                    <p className="text-red-600 dark:text-red-400 mb-4">
-                      Error: {currentReading.error}
-                    </p>
+                    <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-xl p-6 mb-6">
+                      <p className="text-red-800 dark:text-red-300 font-semibold mb-2">
+                        ⚠️ AI Analysis Error
+                      </p>
+                      <p className="text-red-600 dark:text-red-400 text-sm">
+                        {currentReading.error}
+                      </p>
+                      <p className="text-red-500 dark:text-red-500 text-xs mt-2">
+                        Please check the browser console for detailed logs.
+                      </p>
+                    </div>
                   )}
                   
-                  {currentReading.isHealthy !== null && (
+                  {currentReading.dataQualityIssue && (
+                    <div className="bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-200 dark:border-orange-800 rounded-xl p-6 mb-6">
+                      <p className="text-orange-800 dark:text-orange-300 font-semibold mb-2">
+                        ⚠️ Poor Signal Quality
+                      </p>
+                      <p className="text-orange-600 dark:text-orange-400 text-sm">
+                        The ECG signal contains too many saturated values . This indicates a sensor connection issue or invalid data.
+                      </p>
+                      <p className="text-orange-500 dark:text-orange-500 text-xs mt-2">
+                        Please ensure proper sensor contact and try again.
+                      </p>
+                    </div>
+                  )}
+                  
+                  {currentReading.isHealthy !== null && !currentReading.error && !currentReading.dataQualityIssue && (
                     <p className="text-lg text-gray-600 dark:text-gray-400 mb-6">
                       {currentReading.isHealthy 
                         ? 'Your heart rhythm appears normal and healthy.' 
@@ -490,7 +683,7 @@ export default function TakeReadingPage() {
                     </p>
                   )}
 
-                  <div className="grid grid-cols-2 gap-4 max-w-md mx-auto mt-8">
+                  <div className="grid grid-cols-1 gap-4 max-w-md mx-auto mt-8">
                     <div className="bg-white/30 dark:bg-gray-800/30 rounded-xl p-4 text-center">
                       <Clock className="h-8 w-8 text-gray-500 mx-auto mb-2" />
                       <span className="text-sm text-gray-600 dark:text-gray-400 block">Duration</span>
@@ -498,18 +691,14 @@ export default function TakeReadingPage() {
                         {formatTime(currentReading.duration)}
                       </p>
                     </div>
-                    <div className="bg-white/30 dark:bg-gray-800/30 rounded-xl p-4 text-center">
-                      <Heart className="h-8 w-8 text-red-500 mx-auto mb-2" />
-                      <span className="text-sm text-gray-600 dark:text-gray-400 block">Heart Rate</span>
-                      <p className="text-xl font-bold text-gray-900 dark:text-white">
-                        {currentReading.heartRate} BPM
-                      </p>
-                    </div>
+                  
                   </div>
 
-                  <button className="mt-8 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold py-4 px-8 rounded-xl hover:from-blue-600 hover:to-purple-600 transition-all duration-300 transform hover:scale-105">
-                    Save to History
-                  </button>
+                  {!currentReading.error && (
+                    <button className="mt-8 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold py-4 px-8 rounded-xl hover:from-blue-600 hover:to-purple-600 transition-all duration-300 transform hover:scale-105">
+                      Save to History
+                    </button>
+                  )}
                 </div>
 
                 <div className="pt-6 mt-6 border-t border-gray-200/50 dark:border-gray-600/50">
