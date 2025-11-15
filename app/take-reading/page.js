@@ -128,7 +128,7 @@ export default function TakeReadingPage() {
       setAllRecordedData([]); // Clear previous recording data
       
       interval = setInterval(() => {
-        setRecordingTime(prev => {
+        setRecordingTime((prev) => {
           const newTime = prev + 1;
           // Auto-stop recording after 30 seconds
           if (newTime >= 30) {
@@ -137,23 +137,60 @@ export default function TakeReadingPage() {
             console.log(`🫀 Recording stopped automatically after 30 seconds.`);
             
             // Trigger analysis
-            setTimeout(() => {
-              const results = [
-                { status: 'Normal Sinus Rhythm', confidence: 98.5, risk: 'Low', description: 'Your heart rhythm is regular and healthy.' },
-                { status: 'Atrial Fibrillation', confidence: 94.2, risk: 'High', description: 'Irregular heart rhythm detected. Consult your doctor.' },
-                { status: 'Bradycardia', confidence: 89.7, risk: 'Medium', description: 'Heart rate is slower than normal.' },
-                { status: 'PVC Detected', confidence: 92.1, risk: 'Low', description: 'Premature ventricular contractions detected.' },
-              ];
+            setTimeout(async () => {
+              // Get ECG data for prediction (need exactly 200 samples)
+              let ecgDataForPrediction = allRecordedData.length > 0 ? allRecordedData : realECGData;
               
-              const randomResult = results[Math.floor(Math.random() * results.length)];
-              setCurrentReading({
-                ...randomResult,
-                timestamp: new Date().toISOString(),
-                duration: 30,
-                heartRate: latestHeartRate || Math.floor(Math.random() * 40) + 60,
-                totalSamples: allRecordedData.length,
-                avgSignalQuality: connectionStatus === 'connected' ? 95 : 0
-              });
+              // If we have more than 200 samples, take the first 200
+              if (ecgDataForPrediction.length > 200) {
+                ecgDataForPrediction = ecgDataForPrediction.slice(0, 200);
+              } 
+              // If we have less than 200 samples, pad with zeros
+              else if (ecgDataForPrediction.length < 200) {
+                const padding = new Array(200 - ecgDataForPrediction.length).fill(0);
+                ecgDataForPrediction = [...ecgDataForPrediction, ...padding];
+              }
+              
+              try {
+                // Call AI prediction API
+                const response = await fetch('/api/predict', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ecg: ecgDataForPrediction })
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                  throw new Error(result.error);
+                }
+                
+                // result.prediction is 0 (healthy) or 1 (unhealthy)
+                const isHealthy = result.prediction === 0;
+                
+                setCurrentReading({
+                  status: isHealthy ? 'Healthy' : 'Unhealthy',
+                  isHealthy: isHealthy,
+                  prediction: result.prediction,
+                  timestamp: new Date().toISOString(),
+                  duration: 30,
+                  heartRate: latestHeartRate || Math.floor(Math.random() * 40) + 60,
+                  totalSamples: allRecordedData.length,
+                  avgSignalQuality: connectionStatus === 'connected' ? 95 : 0
+                });
+              } catch (error) {
+                console.error('AI Prediction error:', error);
+                setCurrentReading({
+                  status: 'Error',
+                  isHealthy: null,
+                  error: error.message,
+                  timestamp: new Date().toISOString(),
+                  duration: 30,
+                  heartRate: latestHeartRate || Math.floor(Math.random() * 40) + 60,
+                  totalSamples: allRecordedData.length,
+                  avgSignalQuality: connectionStatus === 'connected' ? 95 : 0
+                });
+              }
               setIsAnalyzing(false);
               setShowResults(true);
             }, 3000);
@@ -179,7 +216,7 @@ export default function TakeReadingPage() {
     console.log('🫀 Starting ECG recording for 30 seconds...');
   };
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
     setIsRecording(false);
     setIsAnalyzing(true);
     console.log(`🫀 Recording stopped. Collected ${allRecordedData.length} data points.`);
@@ -192,18 +229,40 @@ export default function TakeReadingPage() {
       });
     }, 100);
     
-    // Simulate analysis with real data
-    setTimeout(() => {
-      const results = [
-        { status: 'Normal Sinus Rhythm', confidence: 98.5, risk: 'Low', description: 'Your heart rhythm is regular and healthy.' },
-        { status: 'Atrial Fibrillation', confidence: 94.2, risk: 'High', description: 'Irregular heart rhythm detected. Consult your doctor.' },
-        { status: 'Bradycardia', confidence: 89.7, risk: 'Medium', description: 'Heart rate is slower than normal.' },
-        { status: 'PVC Detected', confidence: 92.1, risk: 'Low', description: 'Premature ventricular contractions detected.' },
-      ];
+    // Get ECG data for prediction (need exactly 200 samples)
+    let ecgDataForPrediction = allRecordedData.length > 0 ? allRecordedData : realECGData;
+    
+    // If we have more than 200 samples, take the first 200
+    if (ecgDataForPrediction.length > 200) {
+      ecgDataForPrediction = ecgDataForPrediction.slice(0, 200);
+    } 
+    // If we have less than 200 samples, pad with zeros
+    else if (ecgDataForPrediction.length < 200) {
+      const padding = new Array(200 - ecgDataForPrediction.length).fill(0);
+      ecgDataForPrediction = [...ecgDataForPrediction, ...padding];
+    }
+    
+    try {
+      // Call AI prediction API
+      const response = await fetch('/api/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ecg: ecgDataForPrediction })
+      });
       
-      const randomResult = results[Math.floor(Math.random() * results.length)];
+      const result = await response.json();
+      
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      
+      // result.prediction is 0 (healthy) or 1 (unhealthy)
+      const isHealthy = result.prediction === 0;
+      
       setCurrentReading({
-        ...randomResult,
+        status: isHealthy ? 'Healthy' : 'Unhealthy',
+        isHealthy: isHealthy,
+        prediction: result.prediction,
         timestamp: new Date().toISOString(),
         duration: recordingTime,
         heartRate: latestHeartRate || Math.floor(Math.random() * 40) + 60,
@@ -212,7 +271,21 @@ export default function TakeReadingPage() {
       });
       setIsAnalyzing(false);
       setShowResults(true);
-    }, 3000);
+    } catch (error) {
+      console.error('AI Prediction error:', error);
+      setCurrentReading({
+        status: 'Error',
+        isHealthy: null,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+        duration: recordingTime,
+        heartRate: latestHeartRate || Math.floor(Math.random() * 40) + 60,
+        totalSamples: allRecordedData.length,
+        avgSignalQuality: connectionStatus === 'connected' ? 95 : 0
+      });
+      setIsAnalyzing(false);
+      setShowResults(true);
+    }
   };
 
   const formatTime = (seconds) => {
@@ -367,89 +440,87 @@ export default function TakeReadingPage() {
             {showResults && currentReading && (
               <div className="glass-effect rounded-2xl shadow-xl p-8 border bounce-in">
                 <div className="flex items-center space-x-4 mb-8">
-                  <div className="w-16 h-16 bg-gradient-to-r from-emerald-500 to-green-500 rounded-xl flex items-center justify-center">
-                    <CheckCircle className="h-8 w-8 text-white" />
+                  <div className={`w-16 h-16 ${currentReading.isHealthy ? 'bg-gradient-to-r from-emerald-500 to-green-500' : currentReading.isHealthy === false ? 'bg-gradient-to-r from-red-500 to-rose-500' : 'bg-gradient-to-r from-gray-500 to-gray-600'} rounded-xl flex items-center justify-center`}>
+                    {currentReading.isHealthy ? (
+                      <CheckCircle className="h-8 w-8 text-white" />
+                    ) : currentReading.isHealthy === false ? (
+                      <AlertTriangle className="h-8 w-8 text-white" />
+                    ) : (
+                      <AlertTriangle className="h-8 w-8 text-white" />
+                    )}
                   </div>
                   <div>
                     <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                      Analysis Complete
+                      AI Analysis Complete
                     </h3>
                     <p className="text-gray-500 dark:text-gray-400">AI-powered cardiac assessment</p>
                   </div>
                 </div>
                 
-                <div className="grid md:grid-cols-2 gap-8">
-                  <div className="text-center">
-                    <div className="relative inline-block mb-4">
-                      {currentReading.status.includes('Normal') ? (
-                        <CheckCircle className="h-24 w-24 text-emerald-500 mx-auto bounce-in" />
-                      ) : (
-                        <AlertTriangle className="h-24 w-24 text-amber-500 mx-auto bounce-in" />
-                      )}
-                    </div>
-                    
-                    <h4 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-                      {currentReading.status}
-                    </h4>
-                    
-                    <p className="text-gray-600 dark:text-gray-400 mb-4">
-                      {currentReading.description}
+                <div className="text-center mb-8">
+                  <div className="relative inline-block mb-6">
+                    {currentReading.isHealthy ? (
+                      <CheckCircle className="h-32 w-32 text-emerald-500 mx-auto bounce-in" />
+                    ) : currentReading.isHealthy === false ? (
+                      <AlertTriangle className="h-32 w-32 text-red-500 mx-auto bounce-in" />
+                    ) : (
+                      <AlertTriangle className="h-32 w-32 text-gray-500 mx-auto bounce-in" />
+                    )}
+                  </div>
+                  
+                  <h4 className={`text-4xl font-bold mb-4 ${
+                    currentReading.isHealthy ? 'text-emerald-600 dark:text-emerald-400' : 
+                    currentReading.isHealthy === false ? 'text-red-600 dark:text-red-400' : 
+                    'text-gray-600 dark:text-gray-400'
+                  }`}>
+                    {currentReading.status}
+                  </h4>
+                  
+                  {currentReading.error && (
+                    <p className="text-red-600 dark:text-red-400 mb-4">
+                      Error: {currentReading.error}
                     </p>
-                    
-                    <div className="inline-flex items-center space-x-2 bg-white/50 dark:bg-gray-800/50 rounded-lg px-4 py-2">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">Confidence:</span>
-                      <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                        {currentReading.confidence}%
-                      </span>
+                  )}
+                  
+                  {currentReading.isHealthy !== null && (
+                    <p className="text-lg text-gray-600 dark:text-gray-400 mb-6">
+                      {currentReading.isHealthy 
+                        ? 'Your heart rhythm appears normal and healthy.' 
+                        : 'Abnormality detected. Please consult with a healthcare professional.'}
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4 max-w-md mx-auto mt-8">
+                    <div className="bg-white/30 dark:bg-gray-800/30 rounded-xl p-4 text-center">
+                      <Clock className="h-8 w-8 text-gray-500 mx-auto mb-2" />
+                      <span className="text-sm text-gray-600 dark:text-gray-400 block">Duration</span>
+                      <p className="text-xl font-bold text-gray-900 dark:text-white">
+                        {formatTime(currentReading.duration)}
+                      </p>
+                    </div>
+                    <div className="bg-white/30 dark:bg-gray-800/30 rounded-xl p-4 text-center">
+                      <Heart className="h-8 w-8 text-red-500 mx-auto mb-2" />
+                      <span className="text-sm text-gray-600 dark:text-gray-400 block">Heart Rate</span>
+                      <p className="text-xl font-bold text-gray-900 dark:text-white">
+                        {currentReading.heartRate} BPM
+                      </p>
                     </div>
                   </div>
 
-                  <div className="space-y-6">
-                    <div className={`relative overflow-hidden rounded-xl p-6 border-2 ${getRiskColor(currentReading.risk)}`}>
-                      <div className="text-center">
-                        <span className="font-bold text-xl">Risk Level: {currentReading.risk}</span>
-                        <div className="mt-3 w-full bg-white/50 rounded-full h-3">
-                          <div 
-                            className={`h-3 rounded-full ${
-                              currentReading.risk === 'Low' ? 'bg-emerald-500' :
-                              currentReading.risk === 'Medium' ? 'bg-amber-500' : 'bg-red-500'
-                            }`}
-                            style={{
-                              width: currentReading.risk === 'Low' ? '30%' : 
-                                     currentReading.risk === 'Medium' ? '60%' : '90%'
-                            }}
-                          ></div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-white/30 dark:bg-gray-800/30 rounded-xl p-4 text-center">
-                        <Clock className="h-8 w-8 text-gray-500 mx-auto mb-2" />
-                        <span className="text-sm text-gray-600 dark:text-gray-400 block">Duration</span>
-                        <p className="text-xl font-bold text-gray-900 dark:text-white">
-                          {formatTime(currentReading.duration)}
-                        </p>
-                      </div>
-                      <div className="bg-white/30 dark:bg-gray-800/30 rounded-xl p-4 text-center">
-                        <Heart className="h-8 w-8 text-red-500 mx-auto mb-2" />
-                        <span className="text-sm text-gray-600 dark:text-gray-400 block">Avg. Rate</span>
-                        <p className="text-xl font-bold text-gray-900 dark:text-white">
-                          {currentReading.heartRate} BPM
-                        </p>
-                      </div>
-                    </div>
-
-                    <button className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold py-4 rounded-xl hover:from-blue-600 hover:to-purple-600 transition-all duration-300 transform hover:scale-105">
-                      Save to History
-                    </button>
-                  </div>
+                  <button className="mt-8 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold py-4 px-8 rounded-xl hover:from-blue-600 hover:to-purple-600 transition-all duration-300 transform hover:scale-105">
+                    Save to History
+                  </button>
                 </div>
 
                 <div className="pt-6 mt-6 border-t border-gray-200/50 dark:border-gray-600/50">
                   <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
                     Reading completed on {new Date(currentReading.timestamp).toLocaleString()}
                   </p>
+                  {currentReading.totalSamples > 0 && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-2">
+                      Analyzed {currentReading.totalSamples} data points
+                    </p>
+                  )}
                 </div>
               </div>
             )}
