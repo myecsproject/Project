@@ -22,74 +22,75 @@ export default function PastReadingsPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Dummy data for past readings
-  const pastReadings = [
-    {
-      id: 1,
-      date: '2024-01-15',
-      time: '14:30',
-      duration: '2:15',
-      status: 'Normal',
-      heartRate: 72,
-      confidence: 98.5,
-      risk: 'Low',
-      notes: 'Regular rhythm detected'
-    },
-    {
-      id: 2,
-      date: '2024-01-14',
-      time: '09:15',
-      duration: '1:45',
-      status: 'Atrial Fibrillation',
-      heartRate: 95,
-      confidence: 94.2,
-      risk: 'High',
-      notes: 'Irregular rhythm pattern observed'
-    },
-    {
-      id: 3,
-      date: '2024-01-13',
-      time: '16:20',
-      duration: '3:00',
-      status: 'Bradycardia',
-      heartRate: 54,
-      confidence: 89.7,
-      risk: 'Medium',
-      notes: 'Slow heart rate detected'
-    },
-    {
-      id: 4,
-      date: '2024-01-12',
-      time: '11:45',
-      duration: '1:30',
-      status: 'Normal',
-      heartRate: 68,
-      confidence: 97.8,
-      risk: 'Low',
-      notes: 'Healthy heart rhythm'
-    },
-    {
-      id: 5,
-      date: '2024-01-11',
-      time: '08:30',
-      duration: '2:45',
-      status: 'PVC Detected',
-      heartRate: 78,
-      confidence: 92.1,
-      risk: 'Low',
-      notes: 'Occasional premature beats'
-    },
-    {
-      id: 6,
-      date: '2024-01-10',
-      time: '19:10',
-      duration: '2:00',
-      status: 'Tachycardia',
-      heartRate: 105,
-      confidence: 93.6,
-      risk: 'Medium',
-      notes: 'Elevated heart rate'
-    },
-  ];
+  // const pastReadings = [
+  //   {
+  //     id: 1,
+  //     date: '2024-01-15',
+  //     time: '14:30',
+  //     duration: '2:15',
+  //     status: 'Normal',
+  //     heartRate: 72,
+  //     confidence: 98.5,
+  //     risk: 'Low',
+  //     notes: 'Regular rhythm detected'
+  //   },
+  //   {
+  //     id: 2,
+  //     date: '2024-01-14',
+  //     time: '09:15',
+  //     duration: '1:45',
+  //     status: 'Atrial Fibrillation',
+  //     heartRate: 95,
+  //     confidence: 94.2,
+  //     risk: 'High',
+  //     notes: 'Irregular rhythm pattern observed'
+  //   },
+  //   {
+  //     id: 3,
+  //     date: '2024-01-13',
+  //     time: '16:20',
+  //     duration: '3:00',
+  //     status: 'Bradycardia',
+  //     heartRate: 54,
+  //     confidence: 89.7,
+  //     risk: 'Medium',
+  //     notes: 'Slow heart rate detected'
+  //   },
+  //   {
+  //     id: 4,
+  //     date: '2024-01-12',
+  //     time: '11:45',
+  //     duration: '1:30',
+  //     status: 'Normal',
+  //     heartRate: 68,
+  //     confidence: 97.8,
+  //     risk: 'Low',
+  //     notes: 'Healthy heart rhythm'
+  //   },
+  //   {
+  //     id: 5,
+  //     date: '2024-01-11',
+  //     time: '08:30',
+  //     duration: '2:45',
+  //     status: 'PVC Detected',
+  //     heartRate: 78,
+  //     confidence: 92.1,
+  //     risk: 'Low',
+  //     notes: 'Occasional premature beats'
+  //   },
+  //   {
+  //     id: 6,
+  //     date: '2024-01-10',
+  //     time: '19:10',
+  //     duration: '2:00',
+  //     status: 'Tachycardia',
+  //     heartRate: 105,
+  //     confidence: 93.6,
+  //     risk: 'Medium',
+  //     notes: 'Elevated heart rate'
+  //   },
+  // ];
+  const pastReadings = [];
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -136,7 +137,7 @@ export default function PastReadingsPage() {
     total: pastReadings.length,
     normal: pastReadings.filter(r => r.status === 'Normal').length,
     abnormal: pastReadings.filter(r => r.status !== 'Normal').length,
-    avgHeartRate: Math.round(pastReadings.reduce((sum, r) => sum + r.heartRate, 0) / pastReadings.length),
+    avgHeartRate: Math.round(pastReadings.reduce((sum, r) => sum + r.heartRate, 0) / pastReadings.length) ,
   };
 
   const exportToExcel = () => {

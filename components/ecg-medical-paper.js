@@ -41,6 +41,8 @@ export function ECGMedicalPaper({ sampleData, sampleRate = 1000 }) {
       setEcgData(smoothedData);
     } else {
       console.log('No sample data available:', sampleData);
+      // Clear the graph when no data is coming
+      setEcgData([]);
     }
   }, [sampleData]);
 
