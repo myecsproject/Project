@@ -694,11 +694,11 @@ export default function TakeReadingPage() {
                   
                   </div>
 
-                  {!currentReading.error && (
+                  {/* {!currentReading.error && (
                     <button className="mt-8 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold py-4 px-8 rounded-xl hover:from-blue-600 hover:to-purple-600 transition-all duration-300 transform hover:scale-105">
                       Save to History
                     </button>
-                  )}
+                  )} */}
                 </div>
 
                 <div className="pt-6 mt-6 border-t border-gray-200/50 dark:border-gray-600/50">
